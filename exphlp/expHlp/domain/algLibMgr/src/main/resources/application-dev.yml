@@ -1,0 +1,20 @@
+
+spring:
+  data:
+    mongodb:
+      uri: mongodb://user:123456@172.21.0.2:27017/expHlp?authSource=expHlp
+#      uri: mongodb://user:123456@localhost:27017/expHlp?authSource=expHlp
+
+  rabbitmq:
+    host: 172.21.0.3
+    port: 5672
+    virtual-host:
+    username: user
+    password: 123456
+
+#  rabbitmq:
+#    host: localhost
+#    port: 5672
+#    virtual-host:
+#    username: user
+#    password: 123456
