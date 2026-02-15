@@ -60,8 +60,9 @@ service.interceptors.response.use(res => {
       type: "warning"
     }
     ).then(() => {
-      location.href = "/index";
+      location.href = "/login";
     });
+    return Promise.reject(new Error(msg));
   } else if (code === 500) {
     Message({
       message: msg,

@@ -1,10 +1,12 @@
 package fjnu.edu.controller;
 
+import fjnu.edu.auth.PasswordService;
 import fjnu.edu.platmgr.entity.UserInfo;
 import fjnu.edu.platmgr.service.PlatMgrService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -14,6 +16,8 @@ public class PlatMgrCtrl {
 
     @Autowired
     PlatMgrService platMgrService;
+    @Autowired
+    PasswordService passwordService;
 
     /**
      * 获取所有用户
@@ -21,7 +25,7 @@ public class PlatMgrCtrl {
      */
     @GetMapping("/getUsers")
     public List<UserInfo> getUsers() {
-        return platMgrService.getUsers();
+        return sanitizeUsers(platMgrService.getUsers());
     }
 
     /**
@@ -33,7 +37,7 @@ public class PlatMgrCtrl {
     @GetMapping("getUsersByPage")
     public List<UserInfo> getUsersByPage(@RequestParam(value = "pageNum") int pageNum,
                                          @RequestParam(value = "pageSize") int pageSize) {
-        return platMgrService.getUsersByPage(pageNum, pageSize);
+        return sanitizeUsers(platMgrService.getUsersByPage(pageNum, pageSize));
 
     }
 
@@ -44,7 +48,7 @@ public class PlatMgrCtrl {
      */
     @GetMapping("/getUserById")
     public UserInfo getUserById(@RequestParam(value = "userId") String userId) {
-        return platMgrService.getUserById(userId);
+        return sanitizeUser(platMgrService.getUserById(userId));
     }
 
     /**
@@ -62,6 +66,12 @@ public class PlatMgrCtrl {
      */
     @PostMapping("/addUser")
     public void addUser(@RequestBody UserInfo user) {
+        if (user != null && user.getRole() == null) {
+            user.setRole(1);
+        }
+        if (user != null && user.getPassword() != null && !user.getPassword().trim().isEmpty()) {
+            user.setPassword(passwordService.encode(user.getPassword()));
+        }
         platMgrService.addUser(user);
     }
 
@@ -76,7 +86,7 @@ public class PlatMgrCtrl {
     public List<UserInfo> getUserByName(@RequestParam(value = "userName") String userName,
                                   @RequestParam(value = "pageNum") int pageNum,
                                   @RequestParam(value = "pageSize") int pageSize) {
-        return platMgrService.getUsersByName(userName, pageNum, pageSize);
+        return sanitizeUsers(platMgrService.getUsersByName(userName, pageNum, pageSize));
     }
 
     /**
@@ -87,7 +97,7 @@ public class PlatMgrCtrl {
     @GetMapping("/getUserByName")
     public UserInfo getUserByName(@RequestParam(value = "userName") String userName) {
         UserInfo user = platMgrService.getUserByName(userName);
-        return user;
+        return sanitizeUser(user);
     }
 
     /**
@@ -96,7 +106,31 @@ public class PlatMgrCtrl {
      */
     @PostMapping("/updateUserById")
     public void updateUserById(@RequestBody UserInfo user) {
+        if (user != null && user.getRole() == null && user.getUserId() != null) {
+            UserInfo current = platMgrService.getUserById(user.getUserId());
+            if (current != null) {
+                user.setRole(current.getRole());
+            }
+        }
+        if (user != null && (user.getPassword() == null || user.getPassword().trim().isEmpty())) {
+            user.setPassword(null);
+        } else if (user != null) {
+            user.setPassword(passwordService.encode(user.getPassword()));
+        }
         platMgrService.updateUserById(user);
+    }
+
+    @PostMapping("/resetUserPassword")
+    public void resetUserPassword(@RequestBody UserInfo user) {
+        if (user == null || user.getUserId() == null || user.getPassword() == null || user.getPassword().trim().isEmpty()) {
+            throw new IllegalArgumentException("userId和password不能为空");
+        }
+        UserInfo current = platMgrService.getUserById(user.getUserId());
+        if (current == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        current.setPassword(passwordService.encode(user.getPassword()));
+        platMgrService.updateUserById(current);
     }
 
     /**
@@ -120,4 +154,31 @@ public class PlatMgrCtrl {
         return count;
     }
 
+    private List<UserInfo> sanitizeUsers(List<UserInfo> users) {
+        List<UserInfo> out = new ArrayList<>();
+        if (users == null) {
+            return out;
+        }
+        for (UserInfo user : users) {
+            out.add(sanitizeUser(user));
+        }
+        return out;
+    }
+
+    private UserInfo sanitizeUser(UserInfo user) {
+        if (user == null) {
+            return null;
+        }
+        UserInfo out = new UserInfo();
+        out.setUserId(user.getUserId());
+        out.setUserName(user.getUserName());
+        out.setRole(user.getRole());
+        out.setEmail(user.getEmail());
+        out.setWechat(user.getWechat());
+        out.setMobile(user.getMobile());
+        out.setQq(user.getQq());
+        out.setAvatar(user.getAvatar());
+        out.setPassword(null);
+        return out;
+    }
 }

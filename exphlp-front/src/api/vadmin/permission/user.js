@@ -82,7 +82,7 @@ export function changeUserStatus(userId, status) {
 // 查询用户个人信息
 export function getUserProfile() {
   return request({
-    url: "/admin/permission/user/profile/",
+    url: "/api/auth/profile",
     method: "get"
   });
 }
@@ -90,7 +90,7 @@ export function getUserProfile() {
 // 修改用户个人信息
 export function updateUserProfile(data) {
   return request({
-    url: "/admin/permission/user/profile/",
+    url: "/api/auth/profile",
     method: "put",
     data: data
   });
@@ -103,7 +103,7 @@ export function updateUserPwd(oldPassword, newPassword) {
     newPassword
   };
   return request({
-    url: "/admin/permission/user/profile/updatePwd/",
+    url: "/api/auth/password",
     method: "put",
     data: data
   });
@@ -112,9 +112,12 @@ export function updateUserPwd(oldPassword, newPassword) {
 // 用户头像上传
 export function uploadAvatar(data) {
   return request({
-    url: "/admin/permission/user/profile/avatar/",
-    method: "put",
-    data: data
+    url: "/api/auth/avatar",
+    method: "post",
+    data: data,
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
   });
 }
 

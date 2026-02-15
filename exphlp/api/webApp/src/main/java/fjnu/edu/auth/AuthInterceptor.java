@@ -27,6 +27,9 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (path.startsWith("/api/auth/login") || path.startsWith("/api/auth/captcha")) {
             return true;
         }
+        if ("GET".equalsIgnoreCase(request.getMethod()) && path.startsWith("/api/auth/avatar/")) {
+            return true;
+        }
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             writeUnauthorized(response, "未登录或登录已过期");

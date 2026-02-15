@@ -18,20 +18,6 @@
           <svg-icon slot="prefix" icon-class="password" class="el-input__icon input-icon" />
         </el-input>
       </el-form-item>
-      <el-form-item prop="code">
-        <el-input
-          v-model="loginForm.code"
-          auto-complete="off"
-          placeholder="验证码"
-          style="width: 63%"
-          @keyup.enter.native="handleLogin"
-        >
-          <svg-icon slot="prefix" icon-class="validCode" class="el-input__icon input-icon" />
-        </el-input>
-        <div class="login-code">
-          <img :src="codeUrl" class="login-code-img" @click="getCode">
-        </div>
-      </el-form-item>
       <el-checkbox v-model="loginForm.rememberMe" style="margin:0px 0px 25px 0px;">记住密码</el-checkbox>
       <el-form-item style="width:100%;">
         <el-button
@@ -54,7 +40,6 @@
 </template>
 
 <script>
-import { getCodeImg } from "@/api/vadmin/login";
 import Cookies from "js-cookie";
 import { decrypt, encrypt } from "@/utils/jsencrypt";
 
@@ -63,14 +48,11 @@ export default {
   data() {
     return {
       title: process.env.VUE_APP_TITLE || "管理系统",
-      codeUrl: "",
       cookiePassword: "",
       loginForm: {
         username: "admin",
         password: "123456",
-        rememberMe: false,
-        code: "1",
-        uuid: ""
+        rememberMe: false
       },
       loginRules: {
         username: [
@@ -79,7 +61,6 @@ export default {
         password: [
           { required: true, trigger: "blur", message: "密码不能为空" }
         ]
-        // code: [{ required: true, trigger: "change", message: "验证码不能为空" }]
       },
       loading: false,
       redirect: undefined
@@ -94,16 +75,9 @@ export default {
     }
   },
   created() {
-    this.getCode();
     this.getCookie();
   },
   methods: {
-    getCode() {
-      getCodeImg().then(res => {
-        this.codeUrl = res.data.image_url ? process.env.VUE_APP_BASE_API + res.data.image_url : require("@/assets/images/profile.jpg");
-        this.loginForm.uuid = res.data.key;
-      });
-    },
     getCookie() {
       const username = Cookies.get("username");
       const password = Cookies.get("password");
@@ -131,7 +105,6 @@ export default {
             this.$router.push({ path: this.redirect || "/" }).catch(() => {});
           }).catch(() => {
             this.loading = false;
-            this.getCode();
           });
         }
       });
@@ -177,15 +150,6 @@ export default {
   text-align: center;
   color: #bfbfbf;
 }
-.login-code {
-  width: 33%;
-  height: 38px;
-  float: right;
-  img {
-    cursor: pointer;
-    vertical-align: middle;
-  }
-}
 .el-login-footer {
   height: 40px;
   line-height: 40px;
@@ -197,8 +161,5 @@ export default {
   font-family: Arial;
   font-size: 12px;
   letter-spacing: 1px;
-}
-.login-code-img {
-  height: 38px;
 }
 </style>

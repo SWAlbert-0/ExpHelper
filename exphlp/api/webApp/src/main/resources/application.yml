@@ -40,6 +40,7 @@ auth:
   jwt:
     secret: ${AUTH_JWT_SECRET:change-me-in-dev}
     expire-seconds: ${AUTH_JWT_EXPIRE_SECONDS:86400}
+  avatar-dir: ${AUTH_AVATAR_DIR:./data/uploads/avatar}
 
 alg:
   call:

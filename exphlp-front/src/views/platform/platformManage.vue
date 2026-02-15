@@ -29,13 +29,14 @@
       <!-- 多选框 -->
       <el-table-column type="selection" width="60" align="center"></el-table-column>
       <el-table-column prop="userName" label="姓名" width="210" align="center"></el-table-column>
-      <el-table-column prop="password" label="密码" width="200" align="center"></el-table-column>
-      <el-table-column prop="role" label="角色" width="150" align="center"></el-table-column>
       <el-table-column prop="email" label="email" width="150" align="center"></el-table-column>
-      <el-table-column prop="wechat" label="wechat" align="center"></el-table-column>
+      <el-table-column prop="wechat" label="wechat" width="180" align="center"></el-table-column>
+      <el-table-column prop="mobile" label="手机号" width="160" align="center"></el-table-column>
+      <el-table-column prop="qq" label="QQ号" width="140" align="center"></el-table-column>
       <el-table-column label="操作" align="center" width="250">
         <template slot-scope="scope">
           <el-button type="primary" size="mini" icon="el-icon-edit" @click="updateForm(scope.row)">编辑</el-button>
+          <el-button type="warning" size="mini" icon="el-icon-key" @click="resetPassword(scope.row)">重置密码</el-button>
           <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteForm(scope.row.userId)">删除</el-button>
         </template>
       </el-table-column>
@@ -63,17 +64,17 @@
         <el-form-item label="姓名" >
           <el-input v-model="form.userName" placeholder="请输入姓名" :readonly="!canEdit"></el-input>
         </el-form-item>
-        <el-form-item label="密码">
-          <el-input v-model="form.password" placeholder="请输入密码" :readonly="!canEdit"></el-input>
-        </el-form-item>
-        <el-form-item label="角色">
-          <el-input v-model="form.role" placeholder="请输入角色" :readonly="!canEdit"></el-input>
-        </el-form-item>
         <el-form-item label="email">
           <el-input v-model="form.email" placeholder="请输入邮箱" :readonly="!canEdit"></el-input>
         </el-form-item>
         <el-form-item label="微信号">
           <el-input v-model="form.wechat" placeholder="请输入微信号" :readonly="!canEdit"></el-input>
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="form.mobile" placeholder="请输入手机号" :readonly="!canEdit"></el-input>
+        </el-form-item>
+        <el-form-item label="QQ号">
+          <el-input v-model="form.qq" placeholder="请输入QQ号" :readonly="!canEdit"></el-input>
         </el-form-item>
 
       </el-form>
@@ -95,7 +96,8 @@ import {
   getUserByRegexName,
   updateUserById,
   countAllUsers,
-  countUserByUserName
+  countUserByUserName,
+  resetUserPassword
 } from "@/api/vadmin/exphlp/platMgr";
 
 export default {
@@ -111,10 +113,10 @@ export default {
       form: {
         userId: "",
         userName: "",
-        password: "",
-        role: 0,
         email: "",
-        wechat: ""
+        wechat: "",
+        mobile: "",
+        qq: ""
       },
       pageHelper: {
         currentPageNum: 1,
@@ -153,7 +155,14 @@ export default {
       this.multipleSelection = val;
     },
     addForm() {
-      this.form = {};
+      this.form = {
+        userId: "",
+        userName: "",
+        email: "",
+        wechat: "",
+        mobile: "",
+        qq: ""
+      };
       this.dialogVisible = true;
       this.canEdit = true;
       this.title = "添加";
@@ -200,7 +209,7 @@ export default {
         })
           .then(() => {
             for (var i = 0; i < this.multipleSelection.length - 1; i++) {
-              deleteUserById(this.multipleSelection[i].instId);
+              deleteUserById(this.multipleSelection[i].userId);
             }
             deleteUserById(this.multipleSelection[this.multipleSelection.length - 1].userId).then((res) => {
               this.$message({ type: "success", message: "删除成功" });
@@ -222,14 +231,37 @@ export default {
       if (this.title == "编辑") {
         updateUserById(this.form).then(res => {
           this.$message({ type: "success", message: "修改成功!" });
-        });
-      } else if (this.title == "添加") {
-        addUser(this.form).then(res => {
-          this.$message({ type: "success", message: "添加成功!" });
           this.listUsers();
         });
+      } else if (this.title == "添加") {
+        this.$prompt("请输入初始密码", "新增用户", {
+          confirmButtonText: "确定",
+          cancelButtonText: "取消",
+          inputType: "password",
+          inputPattern: /^.{6,50}$/,
+          inputErrorMessage: "密码长度需在6到50之间"
+        }).then(({ value }) => {
+          const payload = Object.assign({}, this.form, { password: value });
+          return addUser(payload);
+        }).then(() => {
+          this.$message({ type: "success", message: "添加成功!" });
+          this.listUsers();
+        }).catch(() => {});
       }
       this.dialogVisible = false;
+    },
+    resetPassword(row) {
+      this.$prompt(`请输入用户 ${row.userName} 的新密码`, "重置密码", {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        inputType: "password",
+        inputPattern: /^.{6,50}$/,
+        inputErrorMessage: "密码长度需在6到50之间"
+      }).then(({ value }) => {
+        return resetUserPassword(row.userId, value);
+      }).then(() => {
+        this.$message({ type: "success", message: "密码已重置" });
+      }).catch(() => {});
     },
     handleSizeChange(val) {
       this.pageHelper.pageSize = val;

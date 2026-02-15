@@ -75,3 +75,14 @@ export function countUserByUserName(userName) {
     }
   });
 }
+
+export function resetUserPassword(userId, password) {
+  return request({
+    url: "/api/PlatController/resetUserPassword",
+    method: "post",
+    data: {
+      userId: userId,
+      password: password
+    }
+  });
+}

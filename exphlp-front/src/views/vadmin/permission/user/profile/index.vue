@@ -17,29 +17,24 @@
                 <div class="pull-right">{{ user.username }}</div>
               </li>
               <li class="list-group-item">
-                <svg-icon icon-class="phone" />
-                手机号码
-                <div class="pull-right">{{ user.mobile }}</div>
+                <svg-icon icon-class="message" />
+                微信号
+                <div class="pull-right">{{ user.wechat || '-' }}</div>
               </li>
               <li class="list-group-item">
                 <svg-icon icon-class="email" />
                 用户邮箱
-                <div class="pull-right">{{ user.email }}</div>
+                <div class="pull-right">{{ user.email || '-' }}</div>
               </li>
               <li class="list-group-item">
-                <svg-icon icon-class="tree" />
-                所属部门
-                <div v-if="user.dept" class="pull-right">{{ user.dept.deptName }} / {{ postGroup }}</div>
+                <svg-icon icon-class="phone" />
+                手机号
+                <div class="pull-right">{{ user.mobile || '-' }}</div>
               </li>
               <li class="list-group-item">
-                <svg-icon icon-class="peoples" />
-                所属角色
-                <div class="pull-right">{{ roleGroup }}</div>
-              </li>
-              <li class="list-group-item">
-                <svg-icon icon-class="date" />
-                创建日期
-                <div class="pull-right">{{ user.create_datetime }}</div>
+                <svg-icon icon-class="message" />
+                QQ号
+                <div class="pull-right">{{ user.qq || '-' }}</div>
               </li>
             </ul>
           </div>
@@ -76,8 +71,6 @@ export default {
   data() {
     return {
       user: {},
-      roleGroup: {},
-      postGroup: {},
       activeTab: "userinfo"
     };
   },
@@ -88,12 +81,6 @@ export default {
     getUser() {
       getUserProfile().then(response => {
         this.user = response.data;
-        this.roleGroup = response.data.role.map(val => {
-          return val.roleName;
-        }).toString();
-        this.postGroup = response.data.post.map(val => {
-          return val.postName;
-        }).toString();
       });
     }
   }

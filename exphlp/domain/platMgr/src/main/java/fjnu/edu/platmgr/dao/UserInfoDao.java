@@ -1,7 +1,6 @@
 package fjnu.edu.platmgr.dao;
 
 import fjnu.edu.platmgr.entity.UserInfo;
-import org.bson.BsonObjectId;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -12,6 +11,7 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -52,8 +52,10 @@ public class UserInfoDao {
      * @Description 获取用户详情
      **/
     public UserInfo getUserById(String userId) {
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(userId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(userId)) {
+            return null;
+        }
+        Query query = new Query(buildIdCriteria(userId));
         UserInfo userInfo = mongoTemplate.findOne(query, UserInfo.class, "userMgr");
 
         return userInfo;
@@ -64,8 +66,10 @@ public class UserInfoDao {
      * @Description 根据Id删除用户
      **/
     public boolean deleteUserById(String userId) {
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(userId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(userId)) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(userId));
         mongoTemplate.remove(query, "userMgr");
 
         return true;
@@ -113,14 +117,21 @@ public class UserInfoDao {
      * @Description 根据用户id更新用户
      **/
     public boolean updateUserById(UserInfo user) {
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(user.getUserId())));
-        Query query = new Query(criteria);
+        if (user == null || !StringUtils.hasText(user.getUserId())) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(user.getUserId()));
 
         Update update = new Update().set("userName", user.getUserName())
-                .set("password", user.getPassword())
                 .set("role", user.getRole())
                 .set("email", user.getEmail())
-                .set("wechat", user.getWechat());
+                .set("wechat", user.getWechat())
+                .set("mobile", user.getMobile())
+                .set("qq", user.getQq())
+                .set("avatar", user.getAvatar());
+        if (StringUtils.hasText(user.getPassword())) {
+            update.set("password", user.getPassword());
+        }
         mongoTemplate.updateFirst(query, update, UserInfo.class, "userMgr");
 
         return true;
@@ -138,5 +149,15 @@ public class UserInfoDao {
         return count;
     }
 
+    private Criteria buildIdCriteria(String id) {
+        Criteria stringIdCriteria = Criteria.where("_id").is(id);
+        if (ObjectId.isValid(id)) {
+            return new Criteria().orOperator(
+                    stringIdCriteria,
+                    Criteria.where("_id").is(new ObjectId(id))
+            );
+        }
+        return stringIdCriteria;
+    }
 
 }
