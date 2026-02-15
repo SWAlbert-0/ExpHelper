@@ -18,6 +18,8 @@ public interface ExePlanMgrService {
 
     public ExePlan getExePlanByName(String planName);
 
+    public ExePlan getExePlanById(String planId);
+
     public boolean deleteExePlanById(String planId);
 
     public boolean updateExePlanById(ExePlan exeplan);

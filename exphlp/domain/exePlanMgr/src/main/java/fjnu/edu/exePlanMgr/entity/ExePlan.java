@@ -4,8 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
-import lombok.experimental.Accessors;
-import org.springframework.data.mongodb.core.mapping.MongoId;
+import org.springframework.data.annotation.Id;
 
 import java.util.List;
 
@@ -14,7 +13,7 @@ import java.util.List;
 @ToString
 @NoArgsConstructor
 public class ExePlan {
-    @MongoId
+    @Id
     private String planId;//MongoDB自动生成的Id
     private String planName;//计划名
     private List<String> probInstIds;//问题实例Id
@@ -30,6 +29,7 @@ public class ExePlan {
      */
     private int exeState;//执行状态（包括以下几种：未执行，执行中，异常结束，正常结束)
     private String description;//计划的描述
+    private String lastError;//最近一次执行错误信息
 
 
 }//end ExePlan

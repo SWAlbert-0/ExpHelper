@@ -3,7 +3,6 @@ package fjnu.edu.alglibmgr.dao;
 import fjnu.edu.alglibmgr.entity.DefPara ;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
 
-import org.bson.BsonObjectId;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -15,6 +14,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.Comparator;
 import java.util.List;
@@ -41,8 +41,10 @@ public class AlgLibMgrDao {
 
     //通过Id查找算法
     public AlgInfo getAlgInfoById(String algId){
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(algId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(algId)) {
+            return null;
+        }
+        Query query = new Query(buildIdCriteria(algId));
         AlgInfo algInfo = mongoTemplate.findOne(query, AlgInfo.class,"algLibMgr");
 
         return algInfo;
@@ -50,11 +52,12 @@ public class AlgLibMgrDao {
 
     //通过算法Id获得指定算法的参数
     public List<DefPara> getParasByAlgInfoId(String algId){
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(algId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(algId)) {
+            return null;
+        }
+        Query query = new Query(buildIdCriteria(algId));
         AlgInfo algInfo = mongoTemplate.findOne(query, AlgInfo.class,"algLibMgr");
-
-        return algInfo.getDefParas();
+        return algInfo == null ? null : algInfo.getDefParas();
     }
 
 
@@ -93,8 +96,10 @@ public class AlgLibMgrDao {
 
     //通过Id删除算法
     public boolean deleteAlgInfoById(String algId){
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(algId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(algId)) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(algId));
         mongoTemplate.remove(query, "algLibMgr");
 
         return true;
@@ -102,9 +107,10 @@ public class AlgLibMgrDao {
 
     //更新算法
     public boolean updateAlgInfoById(AlgInfo algInfo){
-
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(algInfo.getAlgId())));
-        Query query = new Query(criteria);
+        if (algInfo == null || !StringUtils.hasText(algInfo.getAlgId())) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(algInfo.getAlgId()));
 
         Update update = new Update().set("algName", algInfo.getAlgName())
                 .set("serviceName", algInfo.getServiceName())
@@ -129,12 +135,23 @@ public class AlgLibMgrDao {
 
      // 根据id获得算法注册的服务名
     public String getServiceNameById(String algId) {
-
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(algId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(algId)) {
+            return null;
+        }
+        Query query = new Query(buildIdCriteria(algId));
         AlgInfo algInfo = mongoTemplate.findOne(query, AlgInfo.class,"algLibMgr");
-        return algInfo.getServiceName();
+        return algInfo == null ? null : algInfo.getServiceName();
     }
 
+    private Criteria buildIdCriteria(String id) {
+        Criteria stringIdCriteria = Criteria.where("_id").is(id);
+        if (ObjectId.isValid(id)) {
+            return new Criteria().orOperator(
+                    stringIdCriteria,
+                    Criteria.where("_id").is(new ObjectId(id))
+            );
+        }
+        return stringIdCriteria;
+    }
 
 }

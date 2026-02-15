@@ -35,6 +35,11 @@ public class ExePlanMgrServiceImpl implements ExePlanMgrService {
     }
 
     @Override
+    public ExePlan getExePlanById(String planId) {
+        return exePlanMgrDao.getExePlanById(planId);
+    }
+
+    @Override
     public boolean deleteExePlanById(String planId) {
         return exePlanMgrDao.deleteExePlanById(planId);
     }

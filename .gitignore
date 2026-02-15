@@ -1,0 +1,24 @@
+﻿# Java build artifacts
+**/target/
+**/*.class
+
+# IDE files
+.idea/
+**/.idea/
+*.iml
+**/*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node
+**/node_modules/
+docker/.env
+docker/*.jar
+
+# Local docs conversion temp files
+docs/.tmp_docx_extract/
+
+# Local debug screenshots
+temp/

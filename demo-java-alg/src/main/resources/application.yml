@@ -1,0 +1,9 @@
+﻿server:
+  port: 18081
+spring:
+  application:
+    name: demo-java-alg
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848

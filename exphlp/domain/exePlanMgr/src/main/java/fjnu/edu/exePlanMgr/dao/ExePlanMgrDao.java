@@ -1,9 +1,7 @@
 package fjnu.edu.exePlanMgr.dao;
 
-import com.mongodb.client.result.UpdateResult;
 import fjnu.edu.exePlanMgr.Constant.Constant;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
-import org.bson.BsonObjectId;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -54,8 +52,10 @@ public class ExePlanMgrDao {
     }
 
     public ExePlan getExePlanById(String planId) {
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(planId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(planId)) {
+            return null;
+        }
+        Query query = new Query(buildIdCriteria(planId));
         ExePlan exePlan = mongoTemplate.findOne(query, ExePlan.class, "exePlanMgr");
         return exePlan;
     }
@@ -73,9 +73,14 @@ public class ExePlanMgrDao {
 
     //通过执行计划ID删除指定的执行计划
     public boolean deleteExePlanById(String planId) {
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(planId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(planId)) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(planId));
         ExePlan exeplan = mongoTemplate.findOne(query, ExePlan.class, "exePlanMgr");
+        if (exeplan == null) {
+            return false;
+        }
         if (exeplan.getExeState() != Constant.IN_EXECUTION) {                  //未在执行中
             mongoTemplate.remove(query, "exePlanMgr");
         }
@@ -84,23 +89,40 @@ public class ExePlanMgrDao {
 
     //通过Id修改执行计划
     public boolean updateExePlanById(ExePlan exeplan) {
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(exeplan.getPlanId())));
-        Query query = new Query(criteria);
+        if (exeplan == null || !StringUtils.hasText(exeplan.getPlanId())) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(exeplan.getPlanId()));
         Update update = new Update().set("planName", exeplan.getPlanName())
-                .set("probInstId",exeplan.getProbInstIds())
+                .set("probInstIds",exeplan.getProbInstIds())
                 .set("algRunInfos",exeplan.getAlgRunInfos())
                 .set("userIds",exeplan.getUserIds())
                 .set("description", exeplan.getDescription())
                 .set("exeStartTime", exeplan.getExeStartTime())
                 .set("exeEndTime", exeplan.getExeEndTime())
-                .set("exeState", exeplan.getExeState());
-        UpdateResult result = mongoTemplate.updateFirst(query, update, ExePlan.class, "exePlanMgr");
+                .set("exeState", exeplan.getExeState())
+                .set("lastError", exeplan.getLastError());
+        mongoTemplate.updateFirst(query, update, ExePlan.class, "exePlanMgr");
         return true;
     }
 
     public long countAllExePlans() {
         long count = mongoTemplate.count(new Query(), ExePlan.class, "exePlanMgr");
         return count;
+    }
+
+    private Criteria buildIdCriteria(String planId) {
+        if (!StringUtils.hasText(planId)) {
+            return Criteria.where("_id").is(planId);
+        }
+        Criteria stringIdCriteria = Criteria.where("_id").is(planId);
+        if (ObjectId.isValid(planId)) {
+            return new Criteria().orOperator(
+                    stringIdCriteria,
+                    Criteria.where("_id").is(new ObjectId(planId))
+            );
+        }
+        return stringIdCriteria;
     }
 
 

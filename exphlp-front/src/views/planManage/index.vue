@@ -488,12 +488,12 @@ export default {
           value: "执行中"
         },
         {
-          label: "正常结束",
-          value: "正常结束"
-        },
-        {
           label: "异常结束",
           value: "异常结束"
+        },
+        {
+          label: "正常结束",
+          value: "正常结束"
         }
       ],
       exePlans: [],
@@ -1019,11 +1019,12 @@ export default {
     },
     doExePlan(scope) {
       execute(scope.planId).then(res => {
-        if (res) {
+        if (res && res.data && res.data.accepted) {
           scope.exeState = '执行中';
           this.$message({type: "success", message: "计划执行中",});
         } else {
-          this.$message({type: "warning", message: "服务未注册，执行失败",});
+          const msg = (res && res.msg) ? res.msg : "计划执行失败";
+          this.$message({type: "warning", message: msg,});
         }
       });
     },

@@ -1,0 +1,102 @@
+services:
+  mongodb:
+    image: ${MONGO_IMAGE:-mongo:7.0}
+    container_name: c_exphlp_mongo
+    restart: always
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-123456}
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: ${RABBITMQ_IMAGE:-rabbitmq:3.13-management}
+    container_name: c_exphlp_rabbitmq
+    restart: always
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-123456}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nacos:
+    image: ${NACOS_IMAGE:-nacos/nacos-server:v2.3.2}
+    container_name: c_exphlp_nacos
+    restart: always
+    ports:
+      - "${NACOS_PORT:-8848}:8848"
+    environment:
+      MODE: standalone
+      JVM_XMS: 256m
+      JVM_XMX: 256m
+      JVM_XMN: 128m
+
+  webapp:
+    build:
+      context: ..
+      dockerfile: docker/webapp/Dockerfile
+      args:
+        WEBAPP_BASE_IMAGE: ${WEBAPP_BASE_IMAGE:-eclipse-temurin:17-jre}
+        JAR_FILE: exphlp/api/webApp/target/webApp-1.0-SNAPSHOT.jar
+    image: exphlp-webapp:local
+    container_name: c_exphlp_webapp
+    restart: always
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nacos:
+        condition: service_started
+    ports:
+      - "${WEBAPP_PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+      MONGODB_URI: mongodb://${APP_MONGO_USER:-user}:${APP_MONGO_PASSWORD:-123456}@mongodb:27017/${APP_MONGO_DB:-expHlp}?authSource=${APP_MONGO_DB:-expHlp}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-user}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-123456}
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-in-dev}
+      AUTH_JWT_EXPIRE_SECONDS: ${AUTH_JWT_EXPIRE_SECONDS:-86400}
+      ALG_CALL_CONNECT_TIMEOUT_MS: ${ALG_CALL_CONNECT_TIMEOUT_MS:-3000}
+      ALG_CALL_READ_TIMEOUT_MS: ${ALG_CALL_READ_TIMEOUT_MS:-10000}
+      ALG_CALL_RETRY_TIMES: ${ALG_CALL_RETRY_TIMES:-1}
+
+  exphlp_front:
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        FRONT_NODE_IMAGE: ${FRONT_NODE_IMAGE:-node:18-alpine}
+        FRONT_NGINX_IMAGE: ${FRONT_NGINX_IMAGE:-nginx:1.27-alpine}
+        VUE_APP_BASE_API: ${VUE_APP_BASE_API:-}
+        FRONT_HTTP_PROXY: ${FRONT_HTTP_PROXY:-}
+        FRONT_HTTPS_PROXY: ${FRONT_HTTPS_PROXY:-}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+    image: exphlp-front:local
+    container_name: c_exphlp_vue_front
+    restart: always
+    depends_on:
+      - webapp
+    ports:
+      - "${FRONT_PORT:-8086}:80"
+
+volumes:
+  mongo-data:

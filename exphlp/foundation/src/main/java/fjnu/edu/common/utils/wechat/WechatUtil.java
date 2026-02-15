@@ -32,7 +32,7 @@ public class WechatUtil {
 
     public String getAccessToken() throws URISyntaxException, IOException {
         String token = (String) redisTemplate.opsForValue().get("access_token");
-        if (token == null){
+        if (token != null){
             return token;
         }else {
             URI uri = new URIBuilder().setScheme("https")
@@ -46,7 +46,6 @@ public class WechatUtil {
             HttpEntity entity = response.getEntity();
             InputStream inputStream = entity.getContent();
             byte[] data = readInputStream(inputStream);
-            inputStream.read(data);
             String str = new String(data);
             JSONObject json = JSONObject.parseObject(str);
             token = (String) json.get("access_token");

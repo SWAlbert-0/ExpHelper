@@ -1,23 +1,27 @@
 package fjnu.edu.controller;
 
-import fjnu.edu.alglibmgr.entity.AlgInfo;
 import fjnu.edu.entity.DisplayResult;
 import fjnu.edu.entity.PlanExeResult;
+import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.probInstMgr.service.ProbInstMgrService;
 import fjnu.edu.service.AlgRltSaveService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 
-import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Date;
 
 @RestController
 @CrossOrigin
 @RequestMapping("/api/AlgRltSaveController")
 public class AlgRltSaveCtrl {
+    private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+            .withZone(ZoneId.systemDefault());
+
     @Autowired
     AlgRltSaveService algRltSaveService;
     @Autowired
@@ -27,14 +31,23 @@ public class AlgRltSaveCtrl {
     public List<DisplayResult> getAlgSaveByAlgName(@RequestParam(value = "planId") String planId, @RequestParam(value = "algId") String algId, @RequestParam(value = "algName") String algName) {
         PlanExeResult  planExeResult = algRltSaveService.getAlgSaveByAlgName(planId,algId,algName);
         List<DisplayResult>  displayResults= new ArrayList<>();
-        Date dat = new Date(planExeResult.getStartTime());
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        if (planExeResult == null || planExeResult.getGenResults() == null || planExeResult.getGenResults().isEmpty()) {
+            return displayResults;
+        }
+        String startTime = DT_FMT.format(Instant.ofEpochMilli(planExeResult.getStartTime()));
         for (int i = 0; i < planExeResult.getGenResults().size(); i++) {
             DisplayResult displayResult = new DisplayResult();
-            displayResult.setStartTime(sdf.format(dat));
-            Date date = new Date(planExeResult.getGenResults().get(i).getOutTime());
-            displayResult.setOutputTime(sdf.format(date));
-            displayResult.setProbInstName(probInstMgrService.getProbInstByID(planExeResult.getGenResults().get(i).getProbInstId()).getInstName());
+            displayResult.setStartTime(startTime);
+            displayResult.setOutputTime(DT_FMT.format(Instant.ofEpochMilli(planExeResult.getGenResults().get(i).getOutTime())));
+            String probInstId = planExeResult.getGenResults().get(i).getProbInstId();
+            String probInstName = probInstId;
+            if (probInstId != null) {
+                ProbInst probInst = probInstMgrService.getProbInstByID(probInstId);
+                if (probInst != null) {
+                    probInstName = probInst.getInstName();
+                }
+            }
+            displayResult.setProbInstName(probInstName);
             displayResult.setEachResults(planExeResult.getGenResults().get(i).getEachResults());
             displayResults.add(displayResult);
 

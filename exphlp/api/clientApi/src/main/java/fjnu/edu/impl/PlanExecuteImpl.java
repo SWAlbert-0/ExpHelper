@@ -5,29 +5,31 @@ import fjnu.edu.entity.EachResult;
 import fjnu.edu.entity.GenResult;
 import fjnu.edu.entity.OutPuter;
 import fjnu.edu.entity.PlanExeResult;
+import fjnu.edu.exePlanMgr.Constant.Constant;
 import fjnu.edu.exePlanMgr.dao.ExePlanMgrDao;
 import fjnu.edu.exePlanMgr.entity.AlgRunCtx;
 import fjnu.edu.exePlanMgr.entity.AlgRunInfo;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
 import fjnu.edu.exePlanMgr.entity.RunPara;
-import fjnu.edu.intf.IAlgRun;
 import fjnu.edu.intf.PlanExecuteService;
+import fjnu.edu.mail.EmailService;
+import fjnu.edu.platmgr.entity.UserInfo;
+import fjnu.edu.platmgr.service.PlatMgrService;
 import fjnu.edu.probInstMgr.dao.ProbInstDao;
 import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.service.AlgRltSaveService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.Resource;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.*;
 
 @Service
 public class PlanExecuteImpl implements PlanExecuteService {
@@ -42,116 +44,122 @@ public class PlanExecuteImpl implements PlanExecuteService {
 
     @Autowired
     ProbInstDao probInstDao;
-    @Resource
+    @Autowired
+    PlatMgrService platMgrService;
+    @Autowired
+    EmailService emailService;
+    @Resource(name = "algRestTemplate")
     private RestTemplate restTemplate;
-//    @Value("${service-url.nacos-user-service}")
-//    private String serverURL;
+    private final ExecutorService planExecutor = new ThreadPoolExecutor(
+            2,
+            8,
+            60,
+            TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(200),
+            new ThreadPoolExecutor.AbortPolicy()
+    );
+    private final Set<String> runningPlans = ConcurrentHashMap.newKeySet();
+
+    @org.springframework.beans.factory.annotation.Value("${alg.call.retry-times:1}")
+    private int retryTimes;
 
     @Override
     public boolean execute(String planId){
-
-        /**
-         * 拆解执行计划
-         */
-        ExePlan exePlan = exePlanMgrDao.getExePlanById(planId);
-
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
-        // 得到此次执行计划中要进行测试的所有问题实例 ProbInsts
-        List<ProbInst> probInsts = new ArrayList<>();
-        for (String probInstId : exePlan.getProbInstIds()) {
-            probInsts.add(probInstDao.getProbInstByID(probInstId));
+        if (planId == null || planId.trim().isEmpty()) {
+            return false;
         }
+        if (!runningPlans.add(planId)) {
+            return false;
+        }
+        ExePlan exePlan = exePlanMgrDao.getExePlanById(planId);
+        if (exePlan == null) {
+            runningPlans.remove(planId);
+            return false;
+        }
+        exePlan.setExeState(Constant.IN_EXECUTION);
+        exePlan.setExeStartTime(System.currentTimeMillis());
+        exePlan.setExeEndTime(0L);
+        exePlan.setLastError(null);
+        exePlanMgrDao.updateExePlanById(exePlan);
 
-        /**
-         * 将算法运行的信息进行拆分，构造循环（相当于 for algorithm 的第一层循环）
-         */
-        List<AlgRunInfo> algRunInfos = exePlan.getAlgRunInfos();
-        for (int i = 0; i < algRunInfos.size(); i++) {
+        try {
+            planExecutor.execute(() -> runPlan(planId));
+            return true;
+        } catch (RejectedExecutionException ex) {
+            markFailed(exePlan, "执行任务队列已满");
+            exePlan.setExeEndTime(System.currentTimeMillis());
+            exePlanMgrDao.updateExePlanById(exePlan);
+            runningPlans.remove(planId);
+            return false;
+        }
+    }
 
-            // 得到要运行的算法的ID algId
-            String algId = algRunInfos.get(i).getAlgId();
+    private void runPlan(String planId) {
+        ExePlan exePlan = exePlanMgrDao.getExePlanById(planId);
+        if (exePlan == null) {
+            runningPlans.remove(planId);
+            return;
+        }
+        try {
+            List<ProbInst> probInsts = new ArrayList<>();
+            for (String probInstId : exePlan.getProbInstIds()) {
+                ProbInst probInst = probInstDao.getProbInstByID(probInstId);
+                if (probInst == null) {
+                    throw new IllegalStateException("问题实例不存在: " + probInstId);
+                }
+                probInsts.add(probInst);
+            }
 
-            // 得到用户注册的算法的服务名
-            String serviceName = algLibMgrService.getServiceNameById(algId);
-            String serverURL = "http://" + serviceName;
+            List<AlgRunInfo> algRunInfos = exePlan.getAlgRunInfos();
+            for (AlgRunInfo algRunInfo : algRunInfos) {
+                String algId = algRunInfo.getAlgId();
+                String serviceName = algLibMgrService.getServiceNameById(algId);
+                if (serviceName == null || serviceName.trim().isEmpty()) {
+                    throw new IllegalStateException("算法服务未注册: " + algId);
+                }
+                String serverURL = "http://" + serviceName;
 
+                List<RunPara> runParas = algRunInfo.getRunParas();
+                int runNum = algRunInfo.getRunNum();
+                PlanExeResult planExeResult = new PlanExeResult();
+                planExeResult.setAlgName(algRunInfo.getAlgName() + "-" + algRunInfo.getAlgRunInfoId());
+                planExeResult.setStartTime(System.currentTimeMillis());
+                List<GenResult> genResults = new ArrayList<>();
 
-            // 得到算法的参数 runParas
-            List<RunPara> runParas = algRunInfos.get(i).getRunParas();
-
-            // 得到算法要运行的次数 runNum
-            int runNum = algRunInfos.get(i).getRunNum();
-
-            //封装存到数据库的结果
-            PlanExeResult planExeResult= new PlanExeResult();
-
-            String algName = algRunInfos.get(i).getAlgName()+"-"+algRunInfos.get(i).getAlgRunInfoId();
-            planExeResult.setAlgName(algName);
-
-            OutPuter outPuter = new OutPuter(planId, algId, runNum);
-            int a = runNum;
-            List<GenResult> genResults =new ArrayList<>();
-
-            /**
-             * 构建算法运行的上下文，构造循环（相当于 for runNum 的第二层循环）
-             */
-            for (int time = 0; time < runNum; time++) {
-
-
-                /**
-                 * 得到算法运行的对象：单个问题实例，构造循环（相当于 for probInst 的第三层循环）
-                 */
-                for (ProbInst probInst : probInsts) {
-                    AlgRunCtx algRunCtx = buildAlgRunCtx(planId, algId, probInst, runParas, time+1);
-
-                    try {
-                        // 此处利用反射机制，去运行用户所写的算法
-//                    Class clazz = Class.forName(algRunInfos.get(i).getMainClazzPath());
-//                        Class clazz = Class.forName("fjnu.edu.com.algs.MyAlg");
-                        planExeResult.setStartTime(System.currentTimeMillis());//算法开始时间
-//                        IAlgRun iAlgRun = (IAlgRun) clazz.newInstance();
-//                        List<EachResult> eachResults = iAlgRun.run(algRunCtx);
-                        GenResult genResult = new GenResult();
+                for (int time = 0; time < runNum; time++) {
+                    for (ProbInst probInst : probInsts) {
+                        AlgRunCtx algRunCtx = buildAlgRunCtx(planId, algId, probInst, runParas, time + 1);
                         HttpEntity<AlgRunCtx> request = new HttpEntity<>(algRunCtx);
+                        List<EachResult> eachResults = invokeAlgWithRetry(serverURL, request);
 
-                        try {
-                            ResponseEntity<EachResult[]> eachResult = restTemplate.postForEntity(serverURL+"/myAlg/", request, EachResult[].class);
-                            exePlan.setExeState(2);//执行中
-                            exePlanMgrDao.updateExePlanById(exePlan);
-                            List<EachResult> eachResults= Arrays.asList(eachResult.getBody());
-                            genResult.setEachResults(eachResults);
-                            genResult.setProbInstId(probInst.getInstId());
-                            genResult.setOutTime(System.currentTimeMillis());
-
-                            genResults.add(genResult);
-                        } catch (Exception e) {
-                            return  false;
-                        }
-
-
-                    }catch (Exception e){
-                        e.printStackTrace();
+                        GenResult genResult = new GenResult();
+                        genResult.setEachResults(eachResults);
+                        genResult.setProbInstId(probInst.getInstId());
+                        genResult.setOutTime(System.currentTimeMillis());
+                        genResults.add(genResult);
                     }
                 }
 
+                planExeResult.setPlanId(planId);
+                planExeResult.setAlgId(algId);
+                planExeResult.setRunNum(runNum);
+                planExeResult.setOutputTime(System.currentTimeMillis());
+                planExeResult.setGenResults(genResults);
+                algRltSaveService.insertPlanExeResult(planExeResult);
             }
-            planExeResult.setPlanId(planId);
-            planExeResult.setAlgId(algId);
-            planExeResult.setRunNum(runNum);
-            planExeResult.setOutputTime(System.currentTimeMillis());
-            planExeResult.setGenResults(genResults);
 
-            //将运行结果存入数据库
-            algRltSaveService.insertPlanExeResult(planExeResult);
-
-
+            exePlan.setExeState(Constant.NORMAL_TERMINATION);
+            exePlan.setLastError(null);
+            notifyPlanResult(exePlan, true);
+        } catch (Exception ex) {
+            markFailed(exePlan, ex.getMessage());
+            notifyPlanResult(exePlan, false);
+            return;
+        } finally {
+            exePlan.setExeEndTime(System.currentTimeMillis());
+            exePlanMgrDao.updateExePlanById(exePlan);
+            runningPlans.remove(planId);
         }
-
-        exePlan.setExeState(3);
-        exePlanMgrDao.updateExePlanById(exePlan);
-
-        return true;
     }
 
     /**
@@ -166,5 +174,47 @@ public class PlanExecuteImpl implements PlanExecuteService {
         AlgRunCtx algRunCtx = new AlgRunCtx(probInst, runParas, outPuter);
 
         return algRunCtx;
+    }
+
+    private List<EachResult> invokeAlgWithRetry(String serverURL, HttpEntity<AlgRunCtx> request) {
+        RuntimeException lastException = null;
+        for (int attempt = 0; attempt <= retryTimes; attempt++) {
+            try {
+                ResponseEntity<EachResult[]> eachResult = restTemplate.postForEntity(serverURL + "/myAlg/", request, EachResult[].class);
+                EachResult[] body = eachResult.getBody();
+                if (body == null) {
+                    throw new IllegalStateException("算法返回空结果");
+                }
+                return Arrays.asList(body);
+            } catch (RuntimeException ex) {
+                lastException = ex;
+            }
+        }
+        throw lastException == null ? new RuntimeException("算法调用失败") : lastException;
+    }
+
+    private void markFailed(ExePlan exePlan, String error) {
+        exePlan.setExeState(Constant.ABNORMAL_TERMINATION);
+        exePlan.setLastError(error == null ? "未知错误" : error);
+    }
+
+    private void notifyPlanResult(ExePlan exePlan, boolean success) {
+        if (exePlan.getUserIds() == null || exePlan.getUserIds().isEmpty()) {
+            return;
+        }
+        String subject = "执行计划通知: " + exePlan.getPlanName();
+        String status = success ? "正常结束" : "异常结束";
+        String content = "计划[" + exePlan.getPlanName() + "]执行" + status +
+                (exePlan.getLastError() == null ? "" : ("，错误信息: " + exePlan.getLastError()));
+        for (String userId : exePlan.getUserIds()) {
+            try {
+                UserInfo user = platMgrService.getUserById(userId);
+                if (user != null && user.getEmail() != null && !user.getEmail().trim().isEmpty()) {
+                    emailService.sendMail(user.getEmail(), subject, content);
+                }
+            } catch (Exception ignored) {
+                // Notification failures should not change execution result.
+            }
+        }
     }
 }

@@ -1,18 +1,26 @@
 package fjnu.edu.mail;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @ClassName EmailService
  * @Author zhh
  * @Date 2021/12/30 18:18
  **/
+@Service
 public class EmailService {
-    @Autowired
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+
+    @Autowired(required = false)
     private JavaMailSender javaMailSender;
 
+    @Value("${spring.mail.username:no-reply@example.com}")
     private String from;
     /**
      * 发送纯文本邮件.
@@ -22,6 +30,10 @@ public class EmailService {
      * @param text    纯文本内容
      */
     public void sendMail(String to, String subject, String text) {
+        if (javaMailSender == null) {
+            log.warn("Skip email notification because JavaMailSender is not configured. to={}, subject={}", to, subject);
+            return;
+        }
         SimpleMailMessage message = new SimpleMailMessage();
 
         message.setFrom(from);

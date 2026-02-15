@@ -1,9 +1,15 @@
-
 spring:
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
   data:
     mongodb:
-      uri: mongodb://user:123456@172.21.0.2:27017/expHlp?authSource=expHlp
-      #uri: mongodb://user:123456@localhost:27017/expHlp?authSource=expHlp
+      uri: ${MONGODB_URI:mongodb://user:123456@localhost:27017/expHlp?authSource=expHlp}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:user}
+    password: ${RABBITMQ_PASSWORD:123456}
 
 
 #  rabbitmq:
@@ -20,12 +26,23 @@ spring:
 #    password: 123456
 
   application:
-    name: nacos-order-consumer
+    name: ${SPRING_APPLICATION_NAME:nacos-order-consumer}
   cloud:
     nacos:
       discovery:
-        server-addr: localhost:8848
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
 
 #消费者将要去访问的微服务名称(注册成功进nacos的微服务提供者)
 service-url:
-  nacos-user-service: http://nacos-client-service
+  nacos-user-service: ${NACOS_USER_SERVICE_URL:http://nacos-client-service}
+
+auth:
+  jwt:
+    secret: ${AUTH_JWT_SECRET:change-me-in-dev}
+    expire-seconds: ${AUTH_JWT_EXPIRE_SECONDS:86400}
+
+alg:
+  call:
+    connect-timeout-ms: ${ALG_CALL_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${ALG_CALL_READ_TIMEOUT_MS:10000}
+    retry-times: ${ALG_CALL_RETRY_TIMES:1}

@@ -1,7 +1,6 @@
 package fjnu.edu.probInstMgr.dao;
 
 import fjnu.edu.probInstMgr.entity.ProbInst;
-import org.bson.BsonObjectId;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -12,6 +11,7 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -31,16 +31,20 @@ public class ProbInstDao {
             @CacheEvict(value = "probInstMgr.list", allEntries = true)
     })*/
     public boolean delProbInstByID(String instId) {
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(instId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(instId)) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(instId));
         mongoTemplate.remove(query, "probInstMgr");
 
         return true;
     }
 
     public ProbInst getProbInstByID(String instId) {
-        Criteria criteria = Criteria.where("_id").is(new BsonObjectId(new ObjectId(instId)));
-        Query query = new Query(criteria);
+        if (!StringUtils.hasText(instId)) {
+            return null;
+        }
+        Query query = new Query(buildIdCriteria(instId));
         ProbInst probInst =  mongoTemplate.findOne(query, ProbInst.class, "probInstMgr");
 
         return probInst;
@@ -48,8 +52,10 @@ public class ProbInstDao {
     /*@CachePut(value = "probInstMgr", key = "#probInst.instId")
     @CacheEvict(value = "probInstMgr.list", allEntries = true)*/
     public boolean updateProbInst(ProbInst probInst) {
-        Criteria criteria = Criteria.where("instId").is(new BsonObjectId(new ObjectId(probInst.getInstId())));
-        Query query = new Query(criteria);
+        if (probInst == null || !StringUtils.hasText(probInst.getInstId())) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(probInst.getInstId()));
 
         Update update = new Update().set("categoryName", probInst.getCategoryName())
                 .set("instName", probInst.getInstName()).set("machineIp", probInst.getMachineIp())
@@ -92,5 +98,16 @@ public class ProbInstDao {
         Criteria criteria = Criteria.where("instName").is(instName);
         long count = mongoTemplate.count(new Query(criteria), ProbInst.class, "probInstMgr");
         return count;
+    }
+
+    private Criteria buildIdCriteria(String id) {
+        Criteria stringIdCriteria = Criteria.where("_id").is(id);
+        if (ObjectId.isValid(id)) {
+            return new Criteria().orOperator(
+                    stringIdCriteria,
+                    Criteria.where("_id").is(new ObjectId(id))
+            );
+        }
+        return stringIdCriteria;
     }
 }
