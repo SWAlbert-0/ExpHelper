@@ -5,33 +5,30 @@
 
 ## 基线结果
 
-- 总命中：约 105 处
-- `src/api`：约 102 处（主要残留）
-- `src/views`：约 1 处
-- `src/components`：约 2 处
+- 初始基线（迭代07）：约 105 处
+- 当前结果（迭代08）：1 处
+- 当前保留项：`exphlp-front/src/utils/request.js` 的拦截哨兵（用于阻断误调用）
 
-## 模块分布（高优先级）
+## 已完成收敛
 
-- `exphlp-front/src/api/vadmin/permission/*`
-- `exphlp-front/src/api/vadmin/system/*`
-- `exphlp-front/src/api/vadmin/monitor/*`
-- `exphlp-front/src/api/vadmin/menu.js`
+- 已删除不可达模板页面：`src/views/vadmin/{monitor,system,tool,permission/*}`（保留个人中心并迁移至 `src/views/profile`）。
+- 已删除历史 `/admin/*` API 模块：`src/api/vadmin/{monitor,system,permission,tool}` 相关文件。
+- 已移除未使用旧组件与上传入口：`DeptTree`、`UsersTree`、`ModelDisplay`、`FileUpload`。
+- 已将认证与个人中心 API 收敛到 `src/api/auth.js`（统一走 `/api/auth/*`）。
 
 ## 入口现状
 
 - 已移除顶部消息入口与 `/user/msg` 路由。
 - 已移除 `/dict` 隐藏路由入口。
 - 已禁用动态模板路由注入（`permission.js` 固定业务路由模式）。
+- 个人中心页面入口已迁移为 `src/views/profile`，不再依赖 `views/vadmin`。
 
 ## 隔离策略（当前生效）
 
 - 前端请求拦截器对 `"/admin/*"` 调用直接拒绝并提示“该功能已下线，请使用实验助手业务模块”。
-- 保守策略：先阻断误用入口，再分批物理删除未使用 API 文件。
+- `scripts/check-p0.ps1` 已新增校验：除拦截哨兵外，禁止新增 `/admin/` 引用。
 
-## 下一步删除顺序
+## 下一步
 
-1. 删除 `menu.js` 与 `permission.js` 中未使用导入/逻辑（已部分完成）。
-2. 清理 `vadmin/system/*` 里无任何业务页面引用的 API 文件。
-3. 清理 `vadmin/permission/*` 非个人中心链路 API。
-4. 清理 `vadmin/monitor/*` 与 `vadmin/tool/*` 模板 API。
-
+1. 逐步将业务 API 导入路径从 `@/api/vadmin/*` 迁移为语义化目录（如 `@/api/exphlp/*`）。
+2. 在 CI 中强制执行 `scripts/check-p0.ps1`（含 legacy baseline 校验）。

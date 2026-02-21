@@ -23,7 +23,7 @@
 </template>
 
 <script>
-import { updateUserProfile } from "@/api/vadmin/permission/user";
+import { updateProfile } from "@/api/auth";
 
 export default {
   props: {
@@ -66,7 +66,7 @@ export default {
     submit() {
       this.$refs["form"].validate(valid => {
         if (valid) {
-          updateUserProfile(this.user).then(response => {
+          updateProfile(this.user).then(response => {
             this.msgSuccess("修改成功");
           });
         }

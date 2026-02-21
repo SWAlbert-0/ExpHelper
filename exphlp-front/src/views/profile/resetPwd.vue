@@ -17,7 +17,7 @@
 </template>
 
 <script>
-import { updateUserPwd } from "@/api/vadmin/permission/user";
+import { updatePassword } from "@/api/auth";
 
 export default {
   data() {
@@ -55,7 +55,7 @@ export default {
     submit() {
       this.$refs["form"].validate(valid => {
         if (valid) {
-          updateUserPwd(this.user.oldPassword, this.user.newPassword).then(
+          updatePassword(this.user.oldPassword, this.user.newPassword).then(
             response => {
               this.msgSuccess("修改成功");
             }

@@ -1,0 +1,57 @@
+import request from "@/utils/request";
+
+export function login(username, password) {
+  return request({
+    url: "/api/auth/login",
+    method: "post",
+    data: { username, password }
+  });
+}
+
+export function getInfo() {
+  return request({
+    url: "/api/auth/me",
+    method: "get"
+  });
+}
+
+export function logout() {
+  return request({
+    url: "/api/auth/logout",
+    method: "post"
+  });
+}
+
+export function getProfile() {
+  return request({
+    url: "/api/auth/profile",
+    method: "get"
+  });
+}
+
+export function updateProfile(data) {
+  return request({
+    url: "/api/auth/profile",
+    method: "put",
+    data
+  });
+}
+
+export function updatePassword(oldPassword, newPassword) {
+  return request({
+    url: "/api/auth/password",
+    method: "put",
+    data: { oldPassword, newPassword }
+  });
+}
+
+export function uploadAvatar(data) {
+  return request({
+    url: "/api/auth/avatar",
+    method: "post",
+    data,
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  });
+}

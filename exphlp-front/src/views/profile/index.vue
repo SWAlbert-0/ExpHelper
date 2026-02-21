@@ -63,7 +63,7 @@
 import userAvatar from "./userAvatar";
 import userInfo from "./userInfo";
 import resetPwd from "./resetPwd";
-import { getUserProfile } from "@/api/vadmin/permission/user";
+import { getProfile } from "@/api/auth";
 
 export default {
   name: "Profile",
@@ -79,7 +79,7 @@ export default {
   },
   methods: {
     getUser() {
-      getUserProfile().then(response => {
+      getProfile().then(response => {
         this.user = response.data;
       });
     }

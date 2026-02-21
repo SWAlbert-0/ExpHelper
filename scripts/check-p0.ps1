@@ -23,7 +23,35 @@ Run-Step "Backend tests (mvn -q test)" {
 Run-Step "Frontend targeted eslint" {
     Push-Location "exphlp-front"
     try {
-        npx eslint src/store/modules/permission.js src/router/index.js src/layout/components/Navbar.vue src/utils/request.js src/utils/errorCode.js src/views/platform/platformManage.vue src/views/vadmin/permission/user/profile/userInfo.vue
+        npx eslint src/store/modules/permission.js src/router/index.js src/layout/components/Navbar.vue src/utils/request.js src/utils/errorCode.js src/views/platform/platformManage.vue src/views/profile/userInfo.vue src/api/auth.js
+    } finally {
+        Pop-Location
+    }
+}
+
+Run-Step "Frontend legacy admin baseline" {
+    Push-Location "exphlp-front"
+    try {
+        $adminMatches = @()
+        $raw = rg -n "/admin/" src
+        if ($LASTEXITCODE -eq 0) {
+            $adminMatches = $raw
+        } elseif ($LASTEXITCODE -ne 1) {
+            throw "Failed to scan /admin/ baseline."
+        }
+        $allowed = @("src\utils\request.js:")
+        foreach ($line in $adminMatches) {
+            $isAllowed = $false
+            foreach ($prefix in $allowed) {
+                if ($line.StartsWith($prefix)) {
+                    $isAllowed = $true
+                    break
+                }
+            }
+            if (-not $isAllowed) {
+                throw "Unexpected /admin/ reference: $line"
+            }
+        }
     } finally {
         Pop-Location
     }
@@ -53,4 +81,3 @@ if (-not $SkipSmoke) {
 }
 
 Write-Host "P0 checks completed." -ForegroundColor Green
-

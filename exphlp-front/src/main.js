@@ -14,8 +14,6 @@ import permission from "./directive/permission";
 
 import "./assets/icons"; // icon
 import "./permission"; // permission control
-import { getDicts } from "@/api/vadmin/system/dict/data";
-import { getConfigKey } from "@/api/vadmin/system/config";
 import {
   addDateRange,
   download,
@@ -30,17 +28,12 @@ import Pagination from "@/components/Pagination";
 // 自定义表格工具扩展
 import RightToolbar from "@/components/RightToolbar";
 import SmallDialog from "@/components/SmallDialog";
-import DeptTree from "@/components/DeptTree";
-import UsersTree from "@/components/UsersTree";
-import ModelDisplay from "@/components/ModelDisplay";
 import CommonIcon from "@/components/CommonIcon";
 import CommonStaticTable from "@/components/CommonStaticTable";
 import { getCrontabData, getIntervalData } from "./utils/validate"; // 通用图标组件
 import { getModelSelect } from "@/utils/modelSelect";
 
 // 全局方法挂载
-Vue.prototype.getDicts = getDicts;
-Vue.prototype.getConfigKey = getConfigKey;
 Vue.prototype.getModelSelect = getModelSelect;
 Vue.prototype.parseTime = parseTime;
 Vue.prototype.resetForm = resetForm;
@@ -72,9 +65,6 @@ Vue.prototype.msgInfo = function(msg) {
 };
 // 自定义组件
 Vue.component("SmallDialog", SmallDialog);
-Vue.component("DeptTree", DeptTree);
-Vue.component("UsersTree", UsersTree);
-Vue.component("ModelDisplay", ModelDisplay);
 // 全局组件挂载
 Vue.component("Pagination", Pagination);
 Vue.component("RightToolbar", RightToolbar);
