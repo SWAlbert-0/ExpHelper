@@ -11,14 +11,6 @@
 
     <div class="right-menu">
       <template v-if="device !== 'mobile'">
-        <div class="right-menu-item hover-effect">
-          <router-link to="/user/msg">
-            <i class="el-icon-message-solid badge-item-icon" />
-            <el-badge v-if="unread_msg_count" :value="unread_msg_count" :max="99" style="margin-left: -4px;" />
-          </router-link>
-        </div>
-<!--        <search id="header-search" class="right-menu-item" />-->
-
         <screenfull id="screenfull" class="right-menu-item hover-effect" />
 
         <el-tooltip content="布局大小" effect="dark" placement="bottom">
@@ -59,7 +51,6 @@ import SizeSelect from "@/components/SizeSelect";
 import Search from "@/components/HeaderSearch";
 import RuoYiGit from "@/components/RuoYi/Git";
 import RuoYiDoc from "@/components/RuoYi/Doc";
-import store from "@/store";
 
 export default {
   components: {
@@ -71,13 +62,8 @@ export default {
     RuoYiGit,
     RuoYiDoc
   },
-  data() {
-    return {
-      count: store.unread_msg_count
-    };
-  },
   computed: {
-    ...mapGetters(["sidebar", "avatar", "device", "unread_msg_count"]),
+    ...mapGetters(["sidebar", "avatar", "device"]),
     setting: {
       get() {
         return this.$store.state.settings.showSettings;
@@ -101,7 +87,7 @@ export default {
         type: "warning"
       }).then(() => {
         this.$store.dispatch("LogOut").then(() => {
-          //location.href = "/index";
+          // location.href = "/index";
           window.location.reload();
         });
       });

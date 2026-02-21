@@ -76,29 +76,9 @@ export const constantRoutes = [
         component: (resolve) => require(["@/views/vadmin/permission/user/profile/index"], resolve),
         name: "Profile",
         meta: { title: "个人中心", icon: "user" }
-      },
-      {
-        path: "msg",
-        component: (resolve) => require(["@/views/vadmin/system/message/Mymessage"], resolve),
-        name: "msg",
-        meta: { title: "消息通知", icon: "user" }
       }
     ]
   },
-  {
-    path: "/dict",
-    component: Layout,
-    hidden: true,
-    children: [
-      {
-        path: "type/data/:dictId(\\d+)",
-        component: (resolve) => require(["@/views/vadmin/system/dict/data"], resolve),
-        name: "Data",
-        meta: { title: "字典数据", icon: "" }
-      }
-    ]
-  },
-
   {
     path: "/",
     component: Layout,
