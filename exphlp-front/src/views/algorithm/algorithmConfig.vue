@@ -298,7 +298,7 @@ import {
   getParaByAlgId,
   countAllAlgInfos,
   countAlgInfosByAlgName,
-} from "@/api/vadmin/exphlp/algLibMgr";
+} from "@/api/exphlp/algLibMgr";
 
 export default {
 

@@ -15,6 +15,7 @@
 - 已删除历史 `/admin/*` API 模块：`src/api/vadmin/{monitor,system,permission,tool}` 相关文件。
 - 已移除未使用旧组件与上传入口：`DeptTree`、`UsersTree`、`ModelDisplay`、`FileUpload`。
 - 已将认证与个人中心 API 收敛到 `src/api/auth.js`（统一走 `/api/auth/*`）。
+- 已完成业务 API 命名迁移：业务页面不再引用 `@/api/vadmin/*`，迁移至 `src/api/exphlp/*`、`src/api/problem.js`、`src/api/algorithm.js`。
 
 ## 入口现状
 
@@ -30,5 +31,5 @@
 
 ## 下一步
 
-1. 逐步将业务 API 导入路径从 `@/api/vadmin/*` 迁移为语义化目录（如 `@/api/exphlp/*`）。
-2. 在 CI 中强制执行 `scripts/check-p0.ps1`（含 legacy baseline 校验）。
+1. 在 CI 中强制执行 `scripts/check-p0.ps1`（含 `/admin/` 与 legacy import baseline 校验）。
+2. 对新接口模块补充最小单测或契约检查，防止命名迁移后行为回退。

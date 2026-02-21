@@ -46,7 +46,7 @@
 
 import VueForm from "../../../components/form/index.vue";
 import TabalData from "../../../components/tableData";
-import { getParaByAlgId } from "@/api/vadmin/alg";
+import { getParaByAlgId } from "@/api/algorithm";
 export default {
   name: "",
   components: {

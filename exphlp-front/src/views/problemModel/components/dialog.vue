@@ -71,7 +71,7 @@
 </template>
 
 <script>
-import { updateProbById, addProblem } from "@/api/vadmin/problem";
+import { updateProbById, addProblem } from "@/api/problem";
 export default {
   props: ["show", "dialogTitle", "rowData"],
   data() {

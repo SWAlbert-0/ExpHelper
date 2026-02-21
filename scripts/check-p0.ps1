@@ -57,6 +57,24 @@ Run-Step "Frontend legacy admin baseline" {
     }
 }
 
+Run-Step "Frontend legacy api-import baseline" {
+    Push-Location "exphlp-front"
+    try {
+        $legacyImports = @()
+        $raw = rg -n "@/api/vadmin" src
+        if ($LASTEXITCODE -eq 0) {
+            $legacyImports = $raw
+        } elseif ($LASTEXITCODE -ne 1) {
+            throw "Failed to scan legacy api imports."
+        }
+        foreach ($line in $legacyImports) {
+            throw "Unexpected legacy api import: $line"
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 Run-Step "Frontend production build" {
     Push-Location "exphlp-front"
     try {

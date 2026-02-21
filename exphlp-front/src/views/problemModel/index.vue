@@ -109,7 +109,7 @@ import {
   deleteProbInstById,
   countAllProbInsts,
   countProbInstsByInstName
-} from "@/api/vadmin/exphlp/probInstMgr";
+} from "@/api/exphlp/probInstMgr";
 
 export default {
 

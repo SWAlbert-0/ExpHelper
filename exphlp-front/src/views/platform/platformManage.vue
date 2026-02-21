@@ -99,7 +99,7 @@ import {
   countAllUsers,
   countUserByUserName,
   resetUserPassword
-} from "@/api/vadmin/exphlp/platMgr";
+} from "@/api/exphlp/platMgr";
 
 export default {
 

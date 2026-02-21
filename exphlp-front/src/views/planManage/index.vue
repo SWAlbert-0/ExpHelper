@@ -418,17 +418,17 @@
 
 
 <script>
-import {getProbInstById, getProbInstList} from "@/api/vadmin/exphlp/probInstMgr";
-import {getAlgs} from "@/api/vadmin/exphlp/algLibMgr";
-import {getUserList} from "@/api/vadmin/exphlp/platMgr";
+import {getProbInstById, getProbInstList} from "@/api/exphlp/probInstMgr";
+import {getAlgs} from "@/api/exphlp/algLibMgr";
+import {getUserList} from "@/api/exphlp/platMgr";
 import {
   addExePlan, countAllExePlans,
   deleteExePlanById, execute,
   getExePlanByName,
   getExePlans,
   updateExePlanById
-} from "@/api/vadmin/exphlp/exePlanMgr";
-import {getExeResult} from "@/api/vadmin/exphlp/algResultMgr";
+} from "@/api/exphlp/exePlanMgr";
+import {getExeResult} from "@/api/exphlp/algResultMgr";
 
 export default {
   data() {

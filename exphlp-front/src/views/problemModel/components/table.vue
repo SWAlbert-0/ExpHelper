@@ -58,7 +58,7 @@
 
 <script>
 import Dialog from "./dialog";
-import { getProbList, getProById, deleteProbById } from "@/api/vadmin/problem";
+import { getProbList, getProById, deleteProbById } from "@/api/problem";
 
 export default {
   components: {
