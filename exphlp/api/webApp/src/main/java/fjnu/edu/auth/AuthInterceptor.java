@@ -34,15 +34,15 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.warn("traceId={} path={} method={} errorCode={}", traceId, path, request.getMethod(), "AUTH_MISSING_TOKEN");
-            writeUnauthorized(request, response, "未登录或登录已过期", "AUTH_MISSING_TOKEN");
+            log.warn("traceId={} path={} method={} errorCode={}", traceId, path, request.getMethod(), ErrorCode.AUTH_MISSING_TOKEN.code());
+            writeUnauthorized(request, response, "未登录或登录已过期", ErrorCode.AUTH_MISSING_TOKEN.code());
             return false;
         }
         String token = authHeader.substring("Bearer ".length()).trim();
         AuthUser authUser = jwtUtil.verify(token);
         if (authUser == null) {
-            log.warn("traceId={} path={} method={} errorCode={}", traceId, path, request.getMethod(), "AUTH_INVALID_TOKEN");
-            writeUnauthorized(request, response, "登录信息无效", "AUTH_INVALID_TOKEN");
+            log.warn("traceId={} path={} method={} errorCode={}", traceId, path, request.getMethod(), ErrorCode.AUTH_INVALID_TOKEN.code());
+            writeUnauthorized(request, response, "登录信息无效", ErrorCode.AUTH_INVALID_TOKEN.code());
             return false;
         }
         request.setAttribute("authUser", authUser);

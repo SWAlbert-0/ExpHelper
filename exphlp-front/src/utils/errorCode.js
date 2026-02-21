@@ -17,5 +17,8 @@ export default {
   AVATAR_FILE_EMPTY: "上传文件不能为空",
   AVATAR_FILE_TYPE_INVALID: "头像仅支持 png/jpg/jpeg/gif/webp",
   AVATAR_UPLOAD_FAILED: "头像上传失败，请稍后重试",
+  INVALID_ARGUMENT: "请求参数不合法",
+  INTERNAL_ERROR: "系统内部错误，请稍后重试",
+  LEGACY_ADMIN_DISABLED: "该功能已下线，请使用实验助手业务模块",
   "default": "系统未知错误，请反馈给管理员"
 };

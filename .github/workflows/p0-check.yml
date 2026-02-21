@@ -1,0 +1,47 @@
+name: p0-check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 版本1
+      - 版本2
+
+jobs:
+  backend-and-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: exphlp-front/package-lock.json
+
+      - name: Backend tests
+        working-directory: exphlp
+        run: mvn -q test
+
+      - name: Install frontend deps
+        working-directory: exphlp-front
+        run: npm ci
+
+      - name: Frontend targeted eslint
+        working-directory: exphlp-front
+        run: npx eslint src/store/modules/permission.js src/router/index.js src/layout/components/Navbar.vue src/utils/request.js src/utils/errorCode.js src/views/platform/platformManage.vue src/views/vadmin/permission/user/profile/userInfo.vue
+
+      - name: Frontend build
+        working-directory: exphlp-front
+        run: npm run build:prod
+

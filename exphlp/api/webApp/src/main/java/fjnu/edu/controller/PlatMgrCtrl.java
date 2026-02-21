@@ -1,6 +1,7 @@
 package fjnu.edu.controller;
 
 import fjnu.edu.auth.ApiResponse;
+import fjnu.edu.auth.ErrorCode;
 import fjnu.edu.auth.PasswordService;
 import fjnu.edu.auth.TraceContext;
 import fjnu.edu.auth.UserFieldValidator;
@@ -67,7 +68,7 @@ public class PlatMgrCtrl {
     @PostMapping("/deleteUserById")
     public Map<String, Object> deleteUserById(@RequestParam(value = "userId") String userId, HttpServletRequest request) {
         if (!StringUtils.hasText(userId)) {
-            return ApiResponse.failed(request, 400, "userId不能为空", "USER_ID_REQUIRED");
+            return ApiResponse.failed(request, 400, "userId不能为空", ErrorCode.USER_ID_REQUIRED.code());
         }
         platMgrService.deleteUserById(userId);
         log.info("traceId={} path={} action=deleteUser userId={}", TraceContext.getTraceId(request), "/api/PlatController/deleteUserById", userId);
@@ -82,7 +83,7 @@ public class PlatMgrCtrl {
     public Map<String, Object> addUser(@RequestBody UserInfo user, HttpServletRequest request) {
         String validateMsg = validateUserFields(user, true);
         if (validateMsg != null) {
-            return ApiResponse.failed(request, 400, validateMsg, "USER_FIELD_INVALID");
+            return ApiResponse.failed(request, 400, validateMsg, ErrorCode.USER_FIELD_INVALID.code());
         }
         if (user != null && user.getRole() == null) {
             user.setRole(1);
@@ -129,7 +130,7 @@ public class PlatMgrCtrl {
     public Map<String, Object> updateUserById(@RequestBody UserInfo user, HttpServletRequest request) {
         String validateMsg = validateUserFields(user, false);
         if (validateMsg != null) {
-            return ApiResponse.failed(request, 400, validateMsg, "USER_FIELD_INVALID");
+            return ApiResponse.failed(request, 400, validateMsg, ErrorCode.USER_FIELD_INVALID.code());
         }
         if (user != null && user.getRole() == null && user.getUserId() != null) {
             UserInfo current = platMgrService.getUserById(user.getUserId());
@@ -151,14 +152,14 @@ public class PlatMgrCtrl {
     @PostMapping("/resetUserPassword")
     public Map<String, Object> resetUserPassword(@RequestBody UserInfo user, HttpServletRequest request) {
         if (user == null || user.getUserId() == null || user.getPassword() == null || user.getPassword().trim().isEmpty()) {
-            return ApiResponse.failed(request, 400, "userId和password不能为空", "USER_RESET_PASSWORD_INVALID");
+            return ApiResponse.failed(request, 400, "userId和password不能为空", ErrorCode.USER_RESET_PASSWORD_INVALID.code());
         }
         UserInfo current = platMgrService.getUserById(user.getUserId());
         if (current == null) {
-            return ApiResponse.failed(request, 404, "用户不存在", "USER_NOT_FOUND");
+            return ApiResponse.failed(request, 404, "用户不存在", ErrorCode.USER_NOT_FOUND.code());
         }
         if (user.getPassword().length() < 6 || user.getPassword().length() > 50) {
-            return ApiResponse.failed(request, 400, "密码长度需在6到50之间", "PASSWORD_LENGTH_INVALID");
+            return ApiResponse.failed(request, 400, "密码长度需在6到50之间", ErrorCode.PASSWORD_LENGTH_INVALID.code());
         }
         current.setPassword(passwordService.encode(user.getPassword()));
         platMgrService.updateUserById(current);

@@ -1,6 +1,7 @@
 package fjnu.edu.controller;
 
 import fjnu.edu.auth.ApiResponse;
+import fjnu.edu.auth.ErrorCode;
 import fjnu.edu.auth.TraceContext;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
@@ -65,19 +66,19 @@ public class ExePlanMgrCtrl {
     public Map<String, Object> execute(@RequestParam String planId, HttpServletRequest request){
         String traceId = TraceContext.getTraceId(request);
         if (planId == null || planId.trim().isEmpty()) {
-            log.warn("traceId={} path={} errorCode={}", traceId, "/api/ExePlanController/execute", "PLAN_ID_EMPTY");
-            return ApiResponse.failed(request, 400, "planId不能为空", "PLAN_ID_EMPTY");
+            log.warn("traceId={} path={} errorCode={}", traceId, "/api/ExePlanController/execute", ErrorCode.PLAN_ID_EMPTY.code());
+            return ApiResponse.failed(request, 400, "planId不能为空", ErrorCode.PLAN_ID_EMPTY.code());
         }
         ExePlan exePlan;
         try {
             exePlan = exePlanMgrService.getExePlanById(planId);
         } catch (Exception ex) {
-            log.warn("traceId={} path={} planId={} errorCode={}", traceId, "/api/ExePlanController/execute", planId, "PLAN_ID_FORMAT_INVALID");
-            return ApiResponse.failed(request, 400, "planId格式非法", "PLAN_ID_FORMAT_INVALID");
+            log.warn("traceId={} path={} planId={} errorCode={}", traceId, "/api/ExePlanController/execute", planId, ErrorCode.PLAN_ID_FORMAT_INVALID.code());
+            return ApiResponse.failed(request, 400, "planId格式非法", ErrorCode.PLAN_ID_FORMAT_INVALID.code());
         }
         if (exePlan == null) {
-            log.warn("traceId={} path={} planId={} errorCode={}", traceId, "/api/ExePlanController/execute", planId, "PLAN_NOT_FOUND");
-            return ApiResponse.failed(request, 404, "执行计划不存在", "PLAN_NOT_FOUND");
+            log.warn("traceId={} path={} planId={} errorCode={}", traceId, "/api/ExePlanController/execute", planId, ErrorCode.PLAN_NOT_FOUND.code());
+            return ApiResponse.failed(request, 404, "执行计划不存在", ErrorCode.PLAN_NOT_FOUND.code());
         }
         boolean accepted = planExecuteService.execute(planId);
         ExePlan latest = exePlanMgrService.getExePlanById(planId);

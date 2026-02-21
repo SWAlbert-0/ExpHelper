@@ -4,6 +4,7 @@ import javax.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.util.StringUtils;
 
 public final class ApiResponse {
     private ApiResponse() {
@@ -24,6 +25,9 @@ public final class ApiResponse {
     }
 
     public static Map<String, Object> failed(HttpServletRequest request, int code, String msg, String errorCode, Object data) {
+        if (!StringUtils.hasText(errorCode)) {
+            throw new IllegalArgumentException("errorCode must not be empty");
+        }
         Map<String, Object> response = base(request, code, msg);
         response.put("errorCode", errorCode);
         response.put("data", data);
@@ -41,4 +45,3 @@ public final class ApiResponse {
         return response;
     }
 }
-

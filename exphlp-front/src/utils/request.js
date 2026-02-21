@@ -15,6 +15,14 @@ const service = axios.create({
 let reloginPromptVisible = false;
 // request拦截器
 service.interceptors.request.use(config => {
+  const requestUrl = config && config.url ? String(config.url) : "";
+  if (requestUrl.startsWith("/admin/")) {
+    Message({
+      message: "该功能已下线，请使用实验助手业务模块",
+      type: "warning"
+    });
+    return Promise.reject(new Error(errorCode.LEGACY_ADMIN_DISABLED || "legacy admin api disabled"));
+  }
   // 是否需要设置 token
   const isToken = (config.headers || {}).isToken === false;
   if (getToken() && !isToken) {
