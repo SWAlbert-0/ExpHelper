@@ -1,18 +1,27 @@
 package fjnu.edu.controller;
 
+import fjnu.edu.auth.ApiResponse;
 import fjnu.edu.auth.PasswordService;
+import fjnu.edu.auth.TraceContext;
+import fjnu.edu.auth.UserFieldValidator;
 import fjnu.edu.platmgr.entity.UserInfo;
 import fjnu.edu.platmgr.service.PlatMgrService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @CrossOrigin
 @RequestMapping("/api/PlatController")
 public class PlatMgrCtrl {
+    private static final Logger log = LoggerFactory.getLogger(PlatMgrCtrl.class);
 
     @Autowired
     PlatMgrService platMgrService;
@@ -56,8 +65,13 @@ public class PlatMgrCtrl {
      * @param userId
      */
     @PostMapping("/deleteUserById")
-    public void deleteUserById(@RequestParam(value = "userId") String userId) {
+    public Map<String, Object> deleteUserById(@RequestParam(value = "userId") String userId, HttpServletRequest request) {
+        if (!StringUtils.hasText(userId)) {
+            return ApiResponse.failed(request, 400, "userId不能为空", "USER_ID_REQUIRED");
+        }
         platMgrService.deleteUserById(userId);
+        log.info("traceId={} path={} action=deleteUser userId={}", TraceContext.getTraceId(request), "/api/PlatController/deleteUserById", userId);
+        return ApiResponse.ok(request, null);
     }
 
     /**
@@ -65,7 +79,11 @@ public class PlatMgrCtrl {
      * @param user
      */
     @PostMapping("/addUser")
-    public void addUser(@RequestBody UserInfo user) {
+    public Map<String, Object> addUser(@RequestBody UserInfo user, HttpServletRequest request) {
+        String validateMsg = validateUserFields(user, true);
+        if (validateMsg != null) {
+            return ApiResponse.failed(request, 400, validateMsg, "USER_FIELD_INVALID");
+        }
         if (user != null && user.getRole() == null) {
             user.setRole(1);
         }
@@ -73,6 +91,9 @@ public class PlatMgrCtrl {
             user.setPassword(passwordService.encode(user.getPassword()));
         }
         platMgrService.addUser(user);
+        log.info("traceId={} path={} action=addUser userName={}", TraceContext.getTraceId(request), "/api/PlatController/addUser",
+                user == null ? null : user.getUserName());
+        return ApiResponse.ok(request, null);
     }
 
     /**
@@ -105,7 +126,11 @@ public class PlatMgrCtrl {
      * @param user
      */
     @PostMapping("/updateUserById")
-    public void updateUserById(@RequestBody UserInfo user) {
+    public Map<String, Object> updateUserById(@RequestBody UserInfo user, HttpServletRequest request) {
+        String validateMsg = validateUserFields(user, false);
+        if (validateMsg != null) {
+            return ApiResponse.failed(request, 400, validateMsg, "USER_FIELD_INVALID");
+        }
         if (user != null && user.getRole() == null && user.getUserId() != null) {
             UserInfo current = platMgrService.getUserById(user.getUserId());
             if (current != null) {
@@ -118,19 +143,27 @@ public class PlatMgrCtrl {
             user.setPassword(passwordService.encode(user.getPassword()));
         }
         platMgrService.updateUserById(user);
+        log.info("traceId={} path={} action=updateUser userId={}", TraceContext.getTraceId(request), "/api/PlatController/updateUserById",
+                user == null ? null : user.getUserId());
+        return ApiResponse.ok(request, null);
     }
 
     @PostMapping("/resetUserPassword")
-    public void resetUserPassword(@RequestBody UserInfo user) {
+    public Map<String, Object> resetUserPassword(@RequestBody UserInfo user, HttpServletRequest request) {
         if (user == null || user.getUserId() == null || user.getPassword() == null || user.getPassword().trim().isEmpty()) {
-            throw new IllegalArgumentException("userId和password不能为空");
+            return ApiResponse.failed(request, 400, "userId和password不能为空", "USER_RESET_PASSWORD_INVALID");
         }
         UserInfo current = platMgrService.getUserById(user.getUserId());
         if (current == null) {
-            throw new IllegalArgumentException("用户不存在");
+            return ApiResponse.failed(request, 404, "用户不存在", "USER_NOT_FOUND");
+        }
+        if (user.getPassword().length() < 6 || user.getPassword().length() > 50) {
+            return ApiResponse.failed(request, 400, "密码长度需在6到50之间", "PASSWORD_LENGTH_INVALID");
         }
         current.setPassword(passwordService.encode(user.getPassword()));
         platMgrService.updateUserById(current);
+        log.info("traceId={} path={} action=resetPassword userId={}", TraceContext.getTraceId(request), "/api/PlatController/resetUserPassword", user.getUserId());
+        return ApiResponse.ok(request, null);
     }
 
     /**
@@ -180,5 +213,33 @@ public class PlatMgrCtrl {
         out.setAvatar(user.getAvatar());
         out.setPassword(null);
         return out;
+    }
+
+    private String validateUserFields(UserInfo user, boolean requirePassword) {
+        if (user == null) {
+            return "用户信息不能为空";
+        }
+        if (!StringUtils.hasText(user.getUserName())) {
+            return "用户名不能为空";
+        }
+        if (requirePassword && !StringUtils.hasText(user.getPassword())) {
+            return "初始密码不能为空";
+        }
+        if (StringUtils.hasText(user.getPassword()) && (user.getPassword().length() < 6 || user.getPassword().length() > 50)) {
+            return "密码长度需在6到50之间";
+        }
+        String emailMsg = UserFieldValidator.validateEmail(user.getEmail());
+        if (emailMsg != null) {
+            return emailMsg;
+        }
+        String mobileMsg = UserFieldValidator.validateMobile(user.getMobile());
+        if (mobileMsg != null) {
+            return mobileMsg;
+        }
+        String qqMsg = UserFieldValidator.validateQq(user.getQq());
+        if (qqMsg != null) {
+            return qqMsg;
+        }
+        return null;
     }
 }

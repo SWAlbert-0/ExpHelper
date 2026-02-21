@@ -11,7 +11,7 @@
       <el-col :span="20">
         <el-form :inline="true" class="demo-form-inline" align="center">
           <el-form-item>
-            <el-input v-model="userName" placeholder="请输入姓名" clearable/>
+            <el-input v-model="userName" placeholder="请输入姓名" clearable />
           </el-form-item>
           <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getUserByRegexName()">查询</el-button>
           <el-button type="default" icon="el-icon-refresh" @click="back()">返回</el-button>
@@ -45,13 +45,14 @@
     <br>
     <el-pagination
       align="center"
-      @size-change="handleSizeChange"
-      @current-change="handleCurrentChange"
       :current-page="pageHelper.currentPageNum"
       :page-sizes="[10, 20, 30, 40, 50]"
       :page-size="pageHelper.pageSize"
       layout="total, sizes, prev, pager, next, jumper"
-      :total="pageHelper.totalSize">
+      :total="pageHelper.totalSize"
+      @size-change="handleSizeChange"
+      @current-change="handleCurrentChange"
+    >
     </el-pagination>
     <!-- 对话框-->
     <el-dialog
@@ -60,20 +61,20 @@
       width="30%"
       align="center"
     >
-      <el-form :model="form" ref="form" label-width="80px">
-        <el-form-item label="姓名" >
+      <el-form ref="form" :model="form" :rules="rules" label-width="80px">
+        <el-form-item label="姓名" prop="userName">
           <el-input v-model="form.userName" placeholder="请输入姓名" :readonly="!canEdit"></el-input>
         </el-form-item>
-        <el-form-item label="email">
+        <el-form-item label="email" prop="email">
           <el-input v-model="form.email" placeholder="请输入邮箱" :readonly="!canEdit"></el-input>
         </el-form-item>
-        <el-form-item label="微信号">
+        <el-form-item label="微信号" prop="wechat">
           <el-input v-model="form.wechat" placeholder="请输入微信号" :readonly="!canEdit"></el-input>
         </el-form-item>
-        <el-form-item label="手机号">
+        <el-form-item label="手机号" prop="mobile">
           <el-input v-model="form.mobile" placeholder="请输入手机号" :readonly="!canEdit"></el-input>
         </el-form-item>
-        <el-form-item label="QQ号">
+        <el-form-item label="QQ号" prop="qq">
           <el-input v-model="form.qq" placeholder="请输入QQ号" :readonly="!canEdit"></el-input>
         </el-form-item>
 
@@ -122,6 +123,32 @@ export default {
         currentPageNum: 1,
         pageSize: 10,
         totalSize: 0
+      },
+      rules: {
+        userName: [
+          { required: true, message: "姓名不能为空", trigger: "blur" }
+        ],
+        email: [
+          {
+            pattern: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
+            message: "请输入正确的邮箱地址",
+            trigger: "blur"
+          }
+        ],
+        mobile: [
+          {
+            pattern: /^1\d{10}$/,
+            message: "请输入11位手机号",
+            trigger: "blur"
+          }
+        ],
+        qq: [
+          {
+            pattern: /^[1-9]\d{4,11}$/,
+            message: "请输入正确QQ号",
+            trigger: "blur"
+          }
+        ]
       }
     };
   },
@@ -228,27 +255,35 @@ export default {
       this.dialogVisible = false;
     },
     submit() {
-      if (this.title == "编辑") {
-        updateUserById(this.form).then(res => {
-          this.$message({ type: "success", message: "修改成功!" });
-          this.listUsers();
-        });
-      } else if (this.title == "添加") {
-        this.$prompt("请输入初始密码", "新增用户", {
-          confirmButtonText: "确定",
-          cancelButtonText: "取消",
-          inputType: "password",
-          inputPattern: /^.{6,50}$/,
-          inputErrorMessage: "密码长度需在6到50之间"
-        }).then(({ value }) => {
-          const payload = Object.assign({}, this.form, { password: value });
-          return addUser(payload);
-        }).then(() => {
-          this.$message({ type: "success", message: "添加成功!" });
-          this.listUsers();
-        }).catch(() => {});
-      }
-      this.dialogVisible = false;
+      this.$refs.form.validate(valid => {
+        if (!valid) {
+          return;
+        }
+        if (this.title == "编辑") {
+          updateUserById(this.form).then(() => {
+            this.$message({ type: "success", message: "修改成功!" });
+            this.listUsers();
+          });
+          this.dialogVisible = false;
+          return;
+        }
+        if (this.title == "添加") {
+          this.$prompt("请输入初始密码", "新增用户", {
+            confirmButtonText: "确定",
+            cancelButtonText: "取消",
+            inputType: "password",
+            inputPattern: /^.{6,50}$/,
+            inputErrorMessage: "密码长度需在6到50之间"
+          }).then(({ value }) => {
+            const payload = Object.assign({}, this.form, { password: value });
+            return addUser(payload);
+          }).then(() => {
+            this.$message({ type: "success", message: "添加成功!" });
+            this.listUsers();
+          }).catch(() => {});
+          this.dialogVisible = false;
+        }
+      });
     },
     resetPassword(row) {
       this.$prompt(`请输入用户 ${row.userName} 的新密码`, "重置密码", {
