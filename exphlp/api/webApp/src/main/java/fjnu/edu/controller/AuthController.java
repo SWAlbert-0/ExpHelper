@@ -1,11 +1,16 @@
 package fjnu.edu.controller;
 
 import fjnu.edu.auth.AuthUser;
+import fjnu.edu.auth.ApiResponse;
 import fjnu.edu.auth.JwtUtil;
 import fjnu.edu.auth.LoginRequest;
 import fjnu.edu.auth.PasswordService;
+import fjnu.edu.auth.TraceContext;
+import fjnu.edu.auth.UserFieldValidator;
 import fjnu.edu.platmgr.entity.UserInfo;
 import fjnu.edu.platmgr.service.PlatMgrService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -28,6 +33,7 @@ import java.util.*;
 @CrossOrigin
 @RequestMapping("/api/auth")
 public class AuthController {
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private final PlatMgrService platMgrService;
     private final PasswordService passwordService;
     private final JwtUtil jwtUtil;
@@ -46,13 +52,16 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public Map<String, Object> login(@RequestBody LoginRequest request) {
+    public Map<String, Object> login(@RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String traceId = TraceContext.getTraceId(httpRequest);
         if (request == null || request.getUsername() == null || request.getPassword() == null) {
-            return failed("用户名或密码不能为空");
+            log.warn("traceId={} path={} errorCode={}", traceId, "/api/auth/login", "AUTH_BAD_CREDENTIAL_PAYLOAD");
+            return ApiResponse.failed(httpRequest, 400, "用户名或密码不能为空", "AUTH_BAD_CREDENTIAL_PAYLOAD");
         }
         UserInfo userInfo = platMgrService.getUserByName(request.getUsername().trim());
         if (userInfo == null || !passwordService.matches(request.getPassword(), userInfo.getPassword())) {
-            return unauthorized("用户名或密码错误");
+            log.warn("traceId={} path={} username={} errorCode={}", traceId, "/api/auth/login", request.getUsername(), "AUTH_INVALID_CREDENTIALS");
+            return ApiResponse.failed(httpRequest, 401, "用户名或密码错误", "AUTH_INVALID_CREDENTIALS");
         }
 
         // Password migration: plain-text passwords are transparently upgraded to bcrypt.
@@ -66,14 +75,16 @@ public class AuthController {
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
         data.put("expiresAt", System.currentTimeMillis() + 24L * 60 * 60 * 1000);
-        return ok(data);
+        log.info("traceId={} userId={} path={} action=login status=success", traceId, userInfo.getUserId(), "/api/auth/login");
+        return ApiResponse.ok(httpRequest, data);
     }
 
     @GetMapping("/me")
     public Map<String, Object> me(HttpServletRequest request) {
         UserInfo userInfo = currentUser(request);
         if (userInfo == null) {
-            return unauthorized("未登录");
+            log.warn("traceId={} path={} errorCode={}", TraceContext.getTraceId(request), "/api/auth/me", "AUTH_UNAUTHORIZED");
+            return ApiResponse.failed(request, 401, "未登录", "AUTH_UNAUTHORIZED");
         }
 
         Map<String, Object> user = new HashMap<>();
@@ -85,14 +96,15 @@ public class AuthController {
         data.put("roles", Collections.singletonList("ROLE_DEFAULT"));
         data.put("permissions", new ArrayList<>());
         data.put("user", user);
-        return ok(data);
+        return ApiResponse.ok(request, data);
     }
 
     @GetMapping("/profile")
     public Map<String, Object> profile(HttpServletRequest request) {
         UserInfo userInfo = currentUser(request);
         if (userInfo == null) {
-            return unauthorized("未登录");
+            log.warn("traceId={} path={} errorCode={}", TraceContext.getTraceId(request), "/api/auth/profile", "AUTH_UNAUTHORIZED");
+            return ApiResponse.failed(request, 401, "未登录", "AUTH_UNAUTHORIZED");
         }
         Map<String, Object> data = new HashMap<>();
         data.put("userId", userInfo.getUserId());
@@ -102,14 +114,15 @@ public class AuthController {
         data.put("mobile", userInfo.getMobile());
         data.put("qq", userInfo.getQq());
         data.put("avatar", userInfo.getAvatar() == null ? "" : userInfo.getAvatar());
-        return ok(data);
+        return ApiResponse.ok(request, data);
     }
 
     @PutMapping("/profile")
     public Map<String, Object> updateProfile(@RequestBody Map<String, Object> payload, HttpServletRequest request) {
         UserInfo userInfo = currentUser(request);
         if (userInfo == null) {
-            return unauthorized("未登录");
+            log.warn("traceId={} path={} errorCode={}", TraceContext.getTraceId(request), "/api/auth/profile", "AUTH_UNAUTHORIZED");
+            return ApiResponse.failed(request, 401, "未登录", "AUTH_UNAUTHORIZED");
         }
         String userName = stringValue(payload.get("username"));
         if (!StringUtils.hasText(userName)) {
@@ -121,7 +134,19 @@ public class AuthController {
         String qq = stringValue(payload.get("qq"));
 
         if (!StringUtils.hasText(userName)) {
-            return failed("用户名不能为空");
+            return ApiResponse.failed(request, 400, "用户名不能为空", "USER_NAME_REQUIRED");
+        }
+        String emailMsg = UserFieldValidator.validateEmail(email);
+        if (emailMsg != null) {
+            return ApiResponse.failed(request, 400, emailMsg, "USER_EMAIL_INVALID");
+        }
+        String mobileMsg = UserFieldValidator.validateMobile(mobile);
+        if (mobileMsg != null) {
+            return ApiResponse.failed(request, 400, mobileMsg, "USER_MOBILE_INVALID");
+        }
+        String qqMsg = UserFieldValidator.validateQq(qq);
+        if (qqMsg != null) {
+            return ApiResponse.failed(request, 400, qqMsg, "USER_QQ_INVALID");
         }
         userInfo.setUserName(userName.trim());
         userInfo.setEmail(email == null ? null : email.trim());
@@ -129,39 +154,41 @@ public class AuthController {
         userInfo.setMobile(mobile == null ? null : mobile.trim());
         userInfo.setQq(qq == null ? null : qq.trim());
         platMgrService.updateUserById(userInfo);
-        return ok(null);
+        log.info("traceId={} userId={} path={} action=updateProfile status=success", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/profile");
+        return ApiResponse.ok(request, null);
     }
 
     @PutMapping("/password")
     public Map<String, Object> updatePassword(@RequestBody Map<String, Object> payload, HttpServletRequest request) {
         UserInfo userInfo = currentUser(request);
         if (userInfo == null) {
-            return unauthorized("未登录");
+            return ApiResponse.failed(request, 401, "未登录", "AUTH_UNAUTHORIZED");
         }
         String oldPassword = stringValue(payload.get("oldPassword"));
         String newPassword = stringValue(payload.get("newPassword"));
         if (!StringUtils.hasText(oldPassword) || !StringUtils.hasText(newPassword)) {
-            return failed("旧密码和新密码不能为空");
+            return ApiResponse.failed(request, 400, "旧密码和新密码不能为空", "PASSWORD_EMPTY");
         }
         if (newPassword.length() < 6 || newPassword.length() > 50) {
-            return failed("新密码长度需在6到50之间");
+            return ApiResponse.failed(request, 400, "新密码长度需在6到50之间", "PASSWORD_LENGTH_INVALID");
         }
         if (!passwordService.matches(oldPassword, userInfo.getPassword())) {
-            return unauthorized("旧密码错误");
+            return ApiResponse.failed(request, 401, "旧密码错误", "PASSWORD_OLD_INVALID");
         }
         userInfo.setPassword(passwordService.encode(newPassword));
         platMgrService.updateUserById(userInfo);
-        return ok(null);
+        log.info("traceId={} userId={} path={} action=updatePassword status=success", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/password");
+        return ApiResponse.ok(request, null);
     }
 
     @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, Object> uploadAvatar(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
         UserInfo userInfo = currentUser(request);
         if (userInfo == null) {
-            return unauthorized("未登录");
+            return ApiResponse.failed(request, 401, "未登录", "AUTH_UNAUTHORIZED");
         }
         if (file == null || file.isEmpty()) {
-            return failed("上传文件不能为空");
+            return ApiResponse.failed(request, 400, "上传文件不能为空", "AVATAR_FILE_EMPTY");
         }
         String originalName = file.getOriginalFilename();
         String ext = "";
@@ -170,14 +197,14 @@ public class AuthController {
         }
         Set<String> allowed = new HashSet<>(Arrays.asList(".png", ".jpg", ".jpeg", ".gif", ".webp"));
         if (!allowed.contains(ext)) {
-            return failed("仅支持png/jpg/jpeg/gif/webp格式图片");
+            return ApiResponse.failed(request, 400, "仅支持png/jpg/jpeg/gif/webp格式图片", "AVATAR_FILE_TYPE_INVALID");
         }
         String filename = UUID.randomUUID().toString().replace("-", "") + ext;
         try {
             Files.createDirectories(avatarDir);
             Path target = avatarDir.resolve(filename).normalize();
             if (!target.startsWith(avatarDir)) {
-                return failed("非法文件路径");
+                return ApiResponse.failed(request, 400, "非法文件路径", "AVATAR_PATH_INVALID");
             }
             Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
             String avatarPath = "/api/auth/avatar/" + filename;
@@ -185,9 +212,12 @@ public class AuthController {
             platMgrService.updateUserById(userInfo);
             Map<String, Object> data = new HashMap<>();
             data.put("avatar", avatarPath);
-            return ok(data);
+            log.info("traceId={} userId={} path={} action=uploadAvatar status=success avatar={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/avatar", avatarPath);
+            return ApiResponse.ok(request, data);
         } catch (IOException e) {
-            return failed("头像上传失败");
+            log.error("traceId={} userId={} path={} action=uploadAvatar status=failed errorCode={} message={}",
+                    TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/avatar", "AVATAR_UPLOAD_FAILED", e.getMessage());
+            return ApiResponse.failed(request, 500, "头像上传失败", "AVATAR_UPLOAD_FAILED");
         }
     }
 
@@ -212,43 +242,21 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public Map<String, Object> logout() {
-        return ok(null);
+    public Map<String, Object> logout(HttpServletRequest request) {
+        return ApiResponse.ok(request, null);
     }
 
     @GetMapping("/captcha")
-    public Map<String, Object> captcha() {
+    public Map<String, Object> captcha(HttpServletRequest request) {
         Map<String, Object> data = new HashMap<>();
         data.put("image_url", "");
         data.put("key", UUID.randomUUID().toString());
-        return ok(data);
+        return ApiResponse.ok(request, data);
     }
 
     @GetMapping("/healthz")
-    public Map<String, Object> healthz() {
-        return ok("ok");
-    }
-
-    private Map<String, Object> ok(Object data) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 200);
-        response.put("msg", "success");
-        response.put("data", data);
-        return response;
-    }
-
-    private Map<String, Object> unauthorized(String msg) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 401);
-        response.put("msg", msg);
-        return response;
-    }
-
-    private Map<String, Object> failed(String msg) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 500);
-        response.put("msg", msg);
-        return response;
+    public Map<String, Object> healthz(HttpServletRequest request) {
+        return ApiResponse.ok(request, "ok");
     }
 
     private UserInfo currentUser(HttpServletRequest request) {

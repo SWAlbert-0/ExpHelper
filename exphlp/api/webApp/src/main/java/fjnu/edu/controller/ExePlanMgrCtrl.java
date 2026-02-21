@@ -1,11 +1,16 @@
 package fjnu.edu.controller;
 
+import fjnu.edu.auth.ApiResponse;
+import fjnu.edu.auth.TraceContext;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import fjnu.edu.intf.PlanExecuteService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +20,7 @@ import java.util.Map;
 @CrossOrigin
 @RequestMapping("/api/ExePlanController")
 public class ExePlanMgrCtrl {
+    private static final Logger log = LoggerFactory.getLogger(ExePlanMgrCtrl.class);
 
     @Autowired
     ExePlanMgrService exePlanMgrService;
@@ -56,18 +62,22 @@ public class ExePlanMgrCtrl {
     }
 
     @PostMapping("/execute")
-    public Map<String, Object> execute(@RequestParam String planId){
+    public Map<String, Object> execute(@RequestParam String planId, HttpServletRequest request){
+        String traceId = TraceContext.getTraceId(request);
         if (planId == null || planId.trim().isEmpty()) {
-            return failed("planId不能为空");
+            log.warn("traceId={} path={} errorCode={}", traceId, "/api/ExePlanController/execute", "PLAN_ID_EMPTY");
+            return ApiResponse.failed(request, 400, "planId不能为空", "PLAN_ID_EMPTY");
         }
         ExePlan exePlan;
         try {
             exePlan = exePlanMgrService.getExePlanById(planId);
         } catch (Exception ex) {
-            return failed("planId格式非法");
+            log.warn("traceId={} path={} planId={} errorCode={}", traceId, "/api/ExePlanController/execute", planId, "PLAN_ID_FORMAT_INVALID");
+            return ApiResponse.failed(request, 400, "planId格式非法", "PLAN_ID_FORMAT_INVALID");
         }
         if (exePlan == null) {
-            return failed("执行计划不存在");
+            log.warn("traceId={} path={} planId={} errorCode={}", traceId, "/api/ExePlanController/execute", planId, "PLAN_NOT_FOUND");
+            return ApiResponse.failed(request, 404, "执行计划不存在", "PLAN_NOT_FOUND");
         }
         boolean accepted = planExecuteService.execute(planId);
         ExePlan latest = exePlanMgrService.getExePlanById(planId);
@@ -76,34 +86,12 @@ public class ExePlanMgrCtrl {
         data.put("accepted", accepted);
         data.put("state", latest == null ? null : latest.getExeState());
         data.put("lastError", latest == null ? null : latest.getLastError());
+        log.info("traceId={} path={} planId={} accepted={} state={} lastError={}", traceId, "/api/ExePlanController/execute",
+                planId, accepted, data.get("state"), data.get("lastError"));
         if (!accepted) {
-            return ok(data, "计划未被受理，可能正在执行或执行队列已满");
+            return ApiResponse.ok(request, data, "计划未被受理，可能正在执行或执行队列已满");
         }
-        return ok(data);
-    }
-
-    private Map<String, Object> ok(Object data) {
-        return ok(data, "success");
-    }
-
-    private Map<String, Object> ok(Object data, String msg) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 200);
-        response.put("msg", msg);
-        response.put("data", data);
-        return response;
-    }
-
-    private Map<String, Object> failed(String msg) {
-        return failed(msg, null);
-    }
-
-    private Map<String, Object> failed(String msg, Object data) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("code", 500);
-        response.put("msg", msg);
-        response.put("data", data);
-        return response;
+        return ApiResponse.ok(request, data);
     }
 
 }

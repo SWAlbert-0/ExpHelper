@@ -12,6 +12,7 @@ const service = axios.create({
   // 超时
   timeout: 10000
 });
+let reloginPromptVisible = false;
 // request拦截器
 service.interceptors.request.use(config => {
   // 是否需要设置 token
@@ -44,26 +45,33 @@ service.interceptors.request.use(config => {
   return config;
 }, error => {
   console.log(error);
-  Promise.reject(error);
+  return Promise.reject(error);
 });
 
 // 响应拦截器
 service.interceptors.response.use(res => {
+  const payload = res.data || {};
   // 未设置状态码则默认成功状态
-  const code = res.data.code || 200;
+  const code = payload.code || 200;
+  const errorCodeKey = payload.errorCode;
   // 获取错误信息
-  const msg = errorCode[code] || res.data.msg || errorCode["default"];
+  const msg = errorCode[errorCodeKey] || errorCode[code] || payload.msg || payload.message || errorCode["default"];
   if (code === 401) {
-    MessageBox.confirm("登录状态已过期，您可以继续留在该页面，或者重新登录", "系统提示", {
-      confirmButtonText: "重新登录",
-      cancelButtonText: "取消",
-      type: "warning"
+    if (!reloginPromptVisible) {
+      reloginPromptVisible = true;
+      MessageBox.confirm("登录状态已过期，您可以继续留在该页面，或者重新登录", "系统提示", {
+        confirmButtonText: "重新登录",
+        cancelButtonText: "取消",
+        type: "warning"
+      }
+      ).then(() => {
+        location.href = "/login";
+      }).finally(() => {
+        reloginPromptVisible = false;
+      });
     }
-    ).then(() => {
-      location.href = "/login";
-    });
     return Promise.reject(new Error(msg));
-  } else if (code === 500) {
+  } else if (code >= 500) {
     Message({
       message: msg,
       type: "error"
@@ -73,9 +81,9 @@ service.interceptors.response.use(res => {
     Notification.error({
       title: msg
     });
-    return Promise.reject("error");
+    return Promise.reject(new Error(msg));
   } else {
-    return res.data;
+    return payload;
   }
 },
 error => {

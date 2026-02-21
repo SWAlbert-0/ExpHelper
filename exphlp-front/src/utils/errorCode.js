@@ -1,6 +1,21 @@
 export default {
+  "400": "请求参数不正确",
   "401": "认证失败，无法访问系统资源",
   "403": "当前操作没有权限",
   "404": "访问资源不存在",
+  "500": "系统内部错误，请稍后重试",
+  AUTH_MISSING_TOKEN: "未登录或登录已过期",
+  AUTH_INVALID_TOKEN: "登录信息无效，请重新登录",
+  AUTH_UNAUTHORIZED: "当前未登录，请先登录",
+  AUTH_INVALID_CREDENTIALS: "用户名或密码错误",
+  USER_EMAIL_INVALID: "邮箱格式不正确",
+  USER_MOBILE_INVALID: "手机号格式不正确",
+  USER_QQ_INVALID: "QQ号格式不正确",
+  PLAN_ID_EMPTY: "执行计划ID不能为空",
+  PLAN_ID_FORMAT_INVALID: "执行计划ID格式非法",
+  PLAN_NOT_FOUND: "执行计划不存在",
+  AVATAR_FILE_EMPTY: "上传文件不能为空",
+  AVATAR_FILE_TYPE_INVALID: "头像仅支持 png/jpg/jpeg/gif/webp",
+  AVATAR_UPLOAD_FAILED: "头像上传失败，请稍后重试",
   "default": "系统未知错误，请反馈给管理员"
 };
