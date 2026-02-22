@@ -39,9 +39,8 @@ jobs:
 
       - name: Frontend targeted eslint
         working-directory: exphlp-front
-        run: npx eslint src/store/modules/permission.js src/router/index.js src/layout/components/Navbar.vue src/utils/request.js src/utils/errorCode.js src/views/platform/platformManage.vue src/views/vadmin/permission/user/profile/userInfo.vue
+        run: npx eslint src/store/modules/permission.js src/router/index.js src/layout/components/Navbar.vue src/utils/request.js src/utils/errorCode.js src/views/platform/platformManage.vue src/views/profile/userInfo.vue src/api/auth.js
 
       - name: Frontend build
         working-directory: exphlp-front
         run: npm run build:prod
-

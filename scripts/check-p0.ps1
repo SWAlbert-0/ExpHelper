@@ -7,14 +7,22 @@ $ErrorActionPreference = "Stop"
 
 function Run-Step([string]$name, [scriptblock]$action) {
     Write-Host "==> $name" -ForegroundColor Cyan
-    & $action
-    Write-Host "[PASS] $name" -ForegroundColor Green
+    try {
+        & $action
+        Write-Host "[PASS] $name" -ForegroundColor Green
+    } catch {
+        Write-Host "[FAIL] $name -> $($_.Exception.Message)" -ForegroundColor Red
+        throw
+    }
 }
 
 Run-Step "Backend tests (mvn -q test)" {
     Push-Location "exphlp"
     try {
         mvn -q test
+        if ($LASTEXITCODE -ne 0) {
+            throw "mvn test failed with exit code $LASTEXITCODE"
+        }
     } finally {
         Pop-Location
     }
@@ -24,6 +32,9 @@ Run-Step "Frontend targeted eslint" {
     Push-Location "exphlp-front"
     try {
         npx eslint src/store/modules/permission.js src/router/index.js src/layout/components/Navbar.vue src/utils/request.js src/utils/errorCode.js src/views/platform/platformManage.vue src/views/profile/userInfo.vue src/api/auth.js
+        if ($LASTEXITCODE -ne 0) {
+            throw "eslint failed with exit code $LASTEXITCODE"
+        }
     } finally {
         Pop-Location
     }
@@ -79,6 +90,9 @@ Run-Step "Frontend production build" {
     Push-Location "exphlp-front"
     try {
         npm run build:prod
+        if ($LASTEXITCODE -ne 0) {
+            throw "frontend build failed with exit code $LASTEXITCODE"
+        }
     } finally {
         Pop-Location
     }
@@ -95,6 +109,9 @@ if (-not $SkipSmoke) {
             throw "Smoke test requires running backend at $ApiBase. Start webApp first or rerun with -SkipSmoke."
         }
         powershell -ExecutionPolicy Bypass -File "docker/scripts/smoke.ps1" -ApiBase $ApiBase
+        if ($LASTEXITCODE -ne 0) {
+            throw "smoke script failed with exit code $LASTEXITCODE"
+        }
     }
 }
 
