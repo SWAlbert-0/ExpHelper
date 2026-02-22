@@ -40,6 +40,7 @@ test("login flow redirects to main page", async ({ page }) => {
   await page.getByPlaceholder("密码").fill("123456");
   await page.getByRole("button", { name: /登\s*录/ }).click();
 
-  await expect(page).toHaveURL(/\/#\/problemModel\/index$/);
+  // Router uses hash mode and may land on /#/index first, then redirect.
+  await expect(page).toHaveURL(/#\/(index|problemModel\/index)(\?.*)?$/);
   await expect(page.getByText("问题实例管理")).toBeVisible();
 });
