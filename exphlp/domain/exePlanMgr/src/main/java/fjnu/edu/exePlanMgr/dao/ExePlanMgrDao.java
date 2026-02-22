@@ -24,8 +24,14 @@ public class ExePlanMgrDao {
 
     public List<ExePlan> getExePlans(int pageNum, int pageSize) {
         //创建查询对象
+        if (pageNum <= 0) {
+            pageNum = 1;
+        }
         if (pageNum != 0) {
             pageNum--;
+        }
+        if (pageSize <= 0) {
+            pageSize = 10;
         }
         Sort sort = Sort.by(Sort.Order.desc("_id"));
         Pageable pageable = PageRequest.of(pageNum, pageSize);
@@ -41,8 +47,11 @@ public class ExePlanMgrDao {
      *@Date 2022/7/27 9:12
      */
     public String addExePlan(ExePlan exeplan) throws Exception {
+        if (exeplan == null) {
+            throw new Exception("exeplan is null!");
+        }
         String planName = exeplan.getPlanName();
-        if(StringUtils.isEmpty(planName)){
+        if(!StringUtils.hasText(planName)){
             throw new Exception("planName is empty!");
         }
         if(getExePlanByName(planName) != null){
@@ -62,6 +71,9 @@ public class ExePlanMgrDao {
 
     //根据执行计划名字获取执行计划实体
     public ExePlan getExePlanByName(String planName) {
+        if (!StringUtils.hasText(planName)) {
+            return null;
+        }
         //创建条件对象
         Criteria criteria = Criteria.where("planName").is(planName);
         //创建查询对象，然后将条件对象添加到其中

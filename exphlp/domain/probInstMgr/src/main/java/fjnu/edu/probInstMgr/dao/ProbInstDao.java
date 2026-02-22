@@ -13,6 +13,7 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -66,8 +67,14 @@ public class ProbInstDao {
     }
 
     public List<ProbInst> listProbInsts(int pageNum, int pageSize) {
+        if (pageNum <= 0) {
+            pageNum = 1;
+        }
         if (pageNum != 0) {
             pageNum--;
+        }
+        if (pageSize <= 0) {
+            pageSize = 10;
         }
         Sort sort = Sort.by(Sort.Order.desc("_id"));
         Pageable pageable = PageRequest.of(pageNum, pageSize);
@@ -78,8 +85,17 @@ public class ProbInstDao {
     }
 
     public List<ProbInst> listProbInstsByinstName(String instName, int pageNum, int pageSize) {
+        if (!StringUtils.hasText(instName)) {
+            return Collections.emptyList();
+        }
+        if (pageNum <= 0) {
+            pageNum = 1;
+        }
         if (pageNum != 0) {
             pageNum--;
+        }
+        if (pageSize <= 0) {
+            pageSize = 10;
         }
         Pageable pageable = PageRequest.of(pageNum, pageSize);
         Criteria criteria = Criteria.where("instName").is(instName);

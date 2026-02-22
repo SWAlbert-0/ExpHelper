@@ -9,9 +9,11 @@ import fjnu.edu.intf.PlanExecuteService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,27 +34,40 @@ public class ExePlanMgrCtrl {
     @GetMapping("/getExePlans")
     public List<ExePlan> getExePlans(@RequestParam int pageNum,
                                      @RequestParam int pageSize){
-        return exePlanMgrService.getExePlans(pageNum,pageSize);
+        List<ExePlan> plans = exePlanMgrService.getExePlans(normalizePageNum(pageNum), normalizePageSize(pageSize));
+        return plans == null ? Collections.emptyList() : plans;
 
     }
 
     @PostMapping("/addExePlan")
     public String addExePlan(@RequestBody ExePlan exeplan) throws Exception {
+        if (exeplan == null || !StringUtils.hasText(exeplan.getPlanName())) {
+            throw new IllegalArgumentException("计划名称不能为空");
+        }
         return exePlanMgrService.addExePlan(exeplan);
     }
 
     @GetMapping("/getExePlanByName")
     public ExePlan getExeplanByName(@RequestParam String planName){
+        if (!StringUtils.hasText(planName)) {
+            return null;
+        }
         return exePlanMgrService.getExePlanByName(planName);
     }
 
     @PostMapping("/deleteExePlanById")
     public boolean deleteExePlanById(@RequestParam String planId){
+        if (!StringUtils.hasText(planId)) {
+            return false;
+        }
         return exePlanMgrService.deleteExePlanById(planId);
     }
 
     @PostMapping("updateExePlanById")
     public boolean updateExePlanById(@RequestBody ExePlan exeplan){
+        if (exeplan == null || !StringUtils.hasText(exeplan.getPlanId())) {
+            return false;
+        }
         return exePlanMgrService.updateExePlanById(exeplan);
     }
 
@@ -93,6 +108,14 @@ public class ExePlanMgrCtrl {
             return ApiResponse.ok(request, data, "计划未被受理，可能正在执行或执行队列已满");
         }
         return ApiResponse.ok(request, data);
+    }
+
+    private int normalizePageNum(int pageNum) {
+        return pageNum <= 0 ? 1 : pageNum;
+    }
+
+    private int normalizePageSize(int pageSize) {
+        return pageSize <= 0 ? 10 : pageSize;
     }
 
 }

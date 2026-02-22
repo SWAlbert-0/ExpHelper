@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.Comparator;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -28,8 +28,14 @@ public class AlgLibMgrDao {
 
     //分页获取算法列表
     public List<AlgInfo> getAlgInfos(int pageNum, int pageSize){
+        if (pageNum <= 0) {
+            pageNum = 1;
+        }
         if (pageNum != 0){
             pageNum--;
+        }
+        if (pageSize <= 0) {
+            pageSize = 10;
         }
         Sort sort = Sort.by(Sort.Order.desc("_id"));
         Pageable pageable = PageRequest.of(pageNum,pageSize);
@@ -53,19 +59,28 @@ public class AlgLibMgrDao {
     //通过算法Id获得指定算法的参数
     public List<DefPara> getParasByAlgInfoId(String algId){
         if (!StringUtils.hasText(algId)) {
-            return null;
+            return Collections.emptyList();
         }
         Query query = new Query(buildIdCriteria(algId));
         AlgInfo algInfo = mongoTemplate.findOne(query, AlgInfo.class,"algLibMgr");
-        return algInfo == null ? null : algInfo.getDefParas();
+        return algInfo == null || algInfo.getDefParas() == null ? Collections.emptyList() : algInfo.getDefParas();
     }
 
 
     //通过算法名查找算法
     public List<AlgInfo> getAlgInfoByName(String algName,int pageNum,int pageSize){
+        if (!StringUtils.hasText(algName)) {
+            return Collections.emptyList();
+        }
 
+        if (pageNum <= 0) {
+            pageNum = 1;
+        }
         if (pageNum != 0) {
             pageNum--;
+        }
+        if (pageSize <= 0) {
+            pageSize = 10;
         }
         Pageable pageable = PageRequest.of(pageNum, pageSize);
         Criteria criteria = Criteria.where("algName").is(algName);
