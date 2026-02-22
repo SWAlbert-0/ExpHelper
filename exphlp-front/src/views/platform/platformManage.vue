@@ -21,6 +21,7 @@
     <!-- 表格 -->
     <el-table
       :data="tableData"
+      v-loading="tableLoading"
       border
       fit
       highlight-current-row
@@ -82,7 +83,7 @@
 
       <div v-if="title!='查看'">
         <el-button @click="cancel()">取 消</el-button>
-        <el-button type="primary" @click="submit()">确 定</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="submit()">确 定</el-button>
       </div>
     </el-dialog>
   </div>
@@ -109,6 +110,8 @@ export default {
       multipleSelection: [],
       dialogVisible: false,
       canEdit: false,
+      tableLoading: false,
+      submitLoading: false,
       title: "",
       userName: "",
       form: {
@@ -158,24 +161,33 @@ export default {
   },
   methods: {
     listUsers() {
+      this.tableLoading = true;
       getUserList(this.pageHelper.currentPageNum, this.pageHelper.pageSize).then(res => {
         this.tableData = res;
         this.countAllUsers();
+      }).finally(() => {
+        this.tableLoading = false;
       });
     },
     back() {
+      this.tableLoading = true;
       getUserList(1, 10).then(res => {
         this.tableData = res;
         this.countAllUsers();
+      }).finally(() => {
+        this.tableLoading = false;
       });
       this.userName = "";
       this.pageHelper.currentPageNum = 1;
       this.pageHelper.pageSize = 10;
     },
     getUserByRegexName() {
+      this.tableLoading = true;
       getUserByRegexName(this.userName, this.pageHelper.currentPageNum, this.pageHelper.pageSize).then(res => {
         this.tableData = res;
         this.countUserByUserName(this.userName);
+      }).finally(() => {
+        this.tableLoading = false;
       });
     },
     handleSelectionChange(val) {
@@ -235,10 +247,8 @@ export default {
           type: "warning"
         })
           .then(() => {
-            for (var i = 0; i < this.multipleSelection.length - 1; i++) {
-              deleteUserById(this.multipleSelection[i].userId);
-            }
-            deleteUserById(this.multipleSelection[this.multipleSelection.length - 1].userId).then((res) => {
+            const tasks = this.multipleSelection.map(item => deleteUserById(item.userId));
+            Promise.all(tasks).then(() => {
               this.$message({ type: "success", message: "删除成功" });
               this.listUsers();
             });
@@ -255,19 +265,26 @@ export default {
       this.dialogVisible = false;
     },
     submit() {
+      if (this.submitLoading) {
+        return;
+      }
       this.$refs.form.validate(valid => {
         if (!valid) {
           return;
         }
         if (this.title == "编辑") {
+          this.submitLoading = true;
           updateUserById(this.form).then(() => {
             this.$message({ type: "success", message: "修改成功!" });
             this.listUsers();
+          }).finally(() => {
+            this.submitLoading = false;
           });
           this.dialogVisible = false;
           return;
         }
         if (this.title == "添加") {
+          this.submitLoading = true;
           this.$prompt("请输入初始密码", "新增用户", {
             confirmButtonText: "确定",
             cancelButtonText: "取消",
@@ -280,7 +297,9 @@ export default {
           }).then(() => {
             this.$message({ type: "success", message: "添加成功!" });
             this.listUsers();
-          }).catch(() => {});
+          }).catch(() => {}).finally(() => {
+            this.submitLoading = false;
+          });
           this.dialogVisible = false;
         }
       });

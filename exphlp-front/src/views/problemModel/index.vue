@@ -21,6 +21,7 @@
     <!-- 表格 -->
     <el-table
       :data="tableData"
+      v-loading="tableLoading"
       border
       fit
       highlight-current-row
@@ -93,7 +94,7 @@
 
       <div v-if="title!='查看'">
         <el-button @click="cancel('form')">取 消</el-button>
-        <el-button type="primary" @click="submit('form')">确 定</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="submit('form')">确 定</el-button>
       </div>
     </el-dialog>
   </div>
@@ -119,6 +120,8 @@ export default {
       multipleSelection: [],
       dialogVisible:false,
       canEdit: false,
+      tableLoading: false,
+      submitLoading: false,
       title: "",
       instName: '',
       form: {
@@ -209,24 +212,33 @@ export default {
   },
   methods: {
     listProbInsts() {
+      this.tableLoading = true;
       getProbInstList(this.pageHelper.currentPageNum,this.pageHelper.pageSize).then(res => {
         this.tableData = res;
         this.countAllProbInsts();
+      }).finally(() => {
+        this.tableLoading = false;
       });
     },
     back(){
+      this.tableLoading = true;
       getProbInstList(1,10).then(res => {
         this.tableData = res;
         this.countAllProbInsts();
+      }).finally(() => {
+        this.tableLoading = false;
       });
       this.instName = "";
       this.pageHelper.currentPageNum =1;
       this.pageHelper.pageSize =10;
     },
     getByInstName(){
+      this.tableLoading = true;
       getProbInstByInstName(this.instName,this.pageHelper.currentPageNum,this.pageHelper.pageSize).then(res => {
         this.tableData = res;
         this.countProbInstsByInstName(this.instName);
+      }).finally(() => {
+        this.tableLoading = false;
       });
     },
     handleSelectionChange(val) {
@@ -287,10 +299,8 @@ export default {
           type: "warning",
         })
           .then(() => {
-            for (var i = 0; i < this.multipleSelection.length-1; i++) {
-              deleteProbInstById(this.multipleSelection[i].instId);
-            }
-            deleteProbInstById(this.multipleSelection[this.multipleSelection.length-1].instId).then((res) => {
+            const tasks = this.multipleSelection.map(item => deleteProbInstById(item.instId));
+            Promise.all(tasks).then(() => {
               this.$message({type: "success", message: "删除成功",});
               this.listProbInsts();
             });
@@ -308,12 +318,18 @@ export default {
       this.dialogVisible = false;
     },
     submit(formName){
+      if (this.submitLoading) {
+        return;
+      }
       if (this.title == "编辑") {
         this.$refs[formName].validate((valid) => {
           if (valid) {
+            this.submitLoading = true;
             updateProbInstById(this.form).then(res => {
               this.$message({type: "success", message: "修改成功!",});
               this.dialogVisible = false;
+            }).finally(() => {
+              this.submitLoading = false;
             });
           } else {
             this.$message({type: "warning", message: "请完整填写信息",});
@@ -322,10 +338,13 @@ export default {
       } else if (this.title == "添加") {
         this.$refs[formName].validate((valid) => {
           if (valid) {
+            this.submitLoading = true;
             addProbInst(this.form).then(res => {
               this.$message({type: "success", message: "添加成功!",});
               this.dialogVisible = false;
               this.listProbInsts();
+            }).finally(() => {
+              this.submitLoading = false;
             });
           } else {
             this.$message({type: "warning", message: "请完整填写信息",});

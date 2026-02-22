@@ -63,7 +63,8 @@ service.interceptors.response.use(res => {
   const code = payload.code || 200;
   const errorCodeKey = payload.errorCode;
   // 获取错误信息
-  const msg = errorCode[errorCodeKey] || errorCode[code] || payload.msg || payload.message || errorCode["default"];
+  const rawMsg = errorCode[errorCodeKey] || errorCode[code] || payload.msg || payload.message || errorCode["default"];
+  const msg = payload.traceId ? `${rawMsg}（traceId: ${payload.traceId}）` : rawMsg;
   if (code === 401) {
     if (!reloginPromptVisible) {
       reloginPromptVisible = true;
@@ -96,6 +97,7 @@ service.interceptors.response.use(res => {
 },
 error => {
   console.log("err" + error);
+  const traceId = error && error.response && error.response.data && error.response.data.traceId;
   let { message } = error;
   if (message == "Network Error") {
     message = "后端接口连接异常";
@@ -103,6 +105,9 @@ error => {
     message = "系统接口请求超时";
   } else if (message.includes("Request failed with status code")) {
     message = "系统接口" + message.substr(message.length - 3) + "异常";
+  }
+  if (traceId) {
+    message = `${message}（traceId: ${traceId}）`;
   }
   Message({
     message: message,
