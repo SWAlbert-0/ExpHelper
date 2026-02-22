@@ -42,5 +42,7 @@ test("login flow redirects to main page", async ({ page }) => {
 
   // Router uses hash mode and may land on /#/index first, then redirect.
   await expect(page).toHaveURL(/#\/(index|problemModel\/index)(\?.*)?$/);
-  await expect(page.getByText("问题实例管理")).toBeVisible();
+  await expect(
+    page.getByRole("menubar").getByRole("link", { name: "问题实例管理" })
+  ).toBeVisible();
 });

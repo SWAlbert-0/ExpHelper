@@ -1,5 +1,6 @@
 param(
     [switch]$SkipSmoke = $false,
+    [switch]$SkipE2E = $false,
     [string]$ApiBase = "http://localhost:8080"
 )
 
@@ -95,6 +96,20 @@ Run-Step "Frontend production build" {
         }
     } finally {
         Pop-Location
+    }
+}
+
+if (-not $SkipE2E) {
+    Run-Step "Playwright core e2e" {
+        Push-Location "exphlp-front"
+        try {
+            npx playwright test tests/e2e/auth-login.spec.js tests/e2e/plan-manage.spec.js
+            if ($LASTEXITCODE -ne 0) {
+                throw "playwright e2e failed with exit code $LASTEXITCODE"
+            }
+        } finally {
+            Pop-Location
+        }
     }
 }
 
