@@ -10,7 +10,9 @@
     "build:stage": "vue-cli-service build --mode staging",
     "preview": "node build/index.js --preview",
     "lint": "eslint --fix --ext .js --ext .jsx --ext .vue src",
-    "lint-fix": "eslint --fix --ext .js --ext .jsx --ext .vue src"
+    "lint-fix": "eslint --fix --ext .js --ext .jsx --ext .vue src",
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list"
   },
   "husky": {
     "hooks": {
@@ -62,6 +64,7 @@
   },
   "devDependencies": {
     "@babel/eslint-parser": "^7.16.3",
+    "@playwright/test": "^1.58.2",
     "@vue/cli-plugin-babel": "4.4.6",
     "@vue/cli-plugin-eslint": "4.4.6",
     "@vue/cli-service": "4.4.6",
