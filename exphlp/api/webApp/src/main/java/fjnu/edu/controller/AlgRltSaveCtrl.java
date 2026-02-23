@@ -1,6 +1,9 @@
 package fjnu.edu.controller;
 
+import fjnu.edu.auth.ApiResponse;
 import fjnu.edu.entity.DisplayResult;
+import fjnu.edu.entity.ExeResultDetail;
+import fjnu.edu.entity.ExeResultRunDetail;
 import fjnu.edu.entity.PlanExeResult;
 import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.probInstMgr.service.ProbInstMgrService;
@@ -8,6 +11,7 @@ import fjnu.edu.service.AlgRltSaveService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -53,5 +57,24 @@ public class AlgRltSaveCtrl {
 
         }
         return displayResults;
+    }
+
+    @GetMapping("/getExeResultDetail")
+    public java.util.Map<String, Object> getExeResultDetail(@RequestParam(value = "planId") String planId,
+                                                            @RequestParam(value = "algId") String algId,
+                                                            HttpServletRequest request) {
+        ExeResultDetail detail = algRltSaveService.getExeResultDetail(planId, algId);
+        if (detail.getRuns() != null) {
+            for (ExeResultRunDetail run : detail.getRuns()) {
+                if (run == null || run.getProbInstId() == null) {
+                    continue;
+                }
+                ProbInst probInst = probInstMgrService.getProbInstByID(run.getProbInstId());
+                if (probInst != null && probInst.getInstName() != null && !probInst.getInstName().trim().isEmpty()) {
+                    run.setProbInstName(probInst.getInstName());
+                }
+            }
+        }
+        return ApiResponse.ok(request, detail);
     }
 }

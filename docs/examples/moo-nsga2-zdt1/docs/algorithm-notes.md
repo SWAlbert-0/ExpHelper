@@ -20,6 +20,13 @@
    - `bestF2`
    - `runtimeMs`
 
+平台执行结果页会基于 `paretoPoint_*` 按需补算并缓存以下对比指标（metricVersion=v1）：
+
+- `HV`（reference point: `(1.1, 1.1)`）
+- `IGD+`（ZDT1 理论前沿离散点）
+- `Spread(Δ)`（NSGA-II 常用分布性指标）
+- `Runtime(ms)`（直接取 `runtimeMs`）
+
 ## 复杂度说明
 
 NSGA-II 主要开销在非支配排序与拥挤度计算，典型复杂度接近 `O(MN^2)`，其中：

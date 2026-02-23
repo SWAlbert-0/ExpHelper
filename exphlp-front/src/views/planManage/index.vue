@@ -416,12 +416,37 @@
             width="60%"
             :close-on-click-modal="false"
           >
+            <el-alert
+              :title="`状态: ${exeResultDetail.status || '-'}，原因: ${exeResultDetail.reasonCode || '-'}，${exeResultDetail.message || ''}`"
+              :type="exeResultDetail.status === 'SUCCESS' ? 'success' : (exeResultDetail.status === 'MISSING' || exeResultDetail.status === 'EMPTY' ? 'warning' : 'info')"
+              :closable="false"
+              show-icon
+              style="margin-bottom: 12px;"
+            />
+            <el-descriptions title="指标汇总（均值）" :column="4" border size="small" style="margin-bottom: 12px;">
+              <el-descriptions-item label="运行条数">{{ exeResultDetail.aggregate.runCount || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="Runtime(ms)">{{ formatMetric(exeResultDetail.aggregate.runtimeMsMean) }}</el-descriptions-item>
+              <el-descriptions-item label="HV">{{ formatMetric(exeResultDetail.aggregate.hvMean) }}</el-descriptions-item>
+              <el-descriptions-item label="IGD+">{{ formatMetric(exeResultDetail.aggregate.igdPlusMean) }}</el-descriptions-item>
+              <el-descriptions-item label="Spread(Δ)">{{ formatMetric(exeResultDetail.aggregate.spreadDeltaMean) }}</el-descriptions-item>
+              <el-descriptions-item label="指标版本">{{ exeResultDetail.metricVersion || '-' }}</el-descriptions-item>
+            </el-descriptions>
             <el-table :data="exeResultsTable" border fit highlight-current-row>
-              <el-table-column property="paraId" label="序号" width="100" align="center"></el-table-column>
-              <el-table-column property="startTime" label="开始时间" width="100" align="center"></el-table-column>
-              <el-table-column property="outputTime" label="结束时间" width="100" align="center"></el-table-column>
-              <el-table-column property="probInstName" label="问题实例" width="100" align="center"></el-table-column>
-              <el-table-column property="eachResults" label="结果" align="center"></el-table-column>
+              <el-table-column property="runIndex" label="run" width="70" align="center"></el-table-column>
+              <el-table-column property="probInstName" label="问题实例" min-width="120" align="center"></el-table-column>
+              <el-table-column property="runtimeMs" label="Runtime(ms)" width="110" align="center"></el-table-column>
+              <el-table-column property="paretoSize" label="Pareto点数" width="100" align="center"></el-table-column>
+              <el-table-column label="HV" width="100" align="center">
+                <template slot-scope="scope">{{ formatMetric(scope.row.hv) }}</template>
+              </el-table-column>
+              <el-table-column label="IGD+" width="100" align="center">
+                <template slot-scope="scope">{{ formatMetric(scope.row.igdPlus) }}</template>
+              </el-table-column>
+              <el-table-column label="Spread(Δ)" width="110" align="center">
+                <template slot-scope="scope">{{ formatMetric(scope.row.spreadDelta) }}</template>
+              </el-table-column>
+              <el-table-column property="metricStatus" label="指标状态" width="100" align="center"></el-table-column>
+              <el-table-column property="reasonCode" label="原因码" width="160" align="center" show-overflow-tooltip></el-table-column>
             </el-table>
           </el-dialog>
           <el-dialog
@@ -502,7 +527,7 @@ import {
   getExePlans,
   updateExePlanById
 } from "@/api/exphlp/exePlanMgr";
-import {getExeResult} from "@/api/exphlp/algResultMgr";
+import {getExeResultDetail} from "@/api/exphlp/algResultMgr";
 import ExecutionWizard from "@/views/planManage/components/ExecutionWizard";
 
 export default {
@@ -542,6 +567,14 @@ export default {
       },
       runParaTable: [],
       exeResultsTable: [],
+      exeResultDetail: {
+        status: "",
+        reasonCode: "",
+        message: "",
+        metricVersion: "",
+        runs: [],
+        aggregate: {},
+      },
       runParaForm: {},
       userInfos: [],
 
@@ -921,6 +954,14 @@ export default {
       this.planLogExecutionId = "";
       this.planLogScope = "latest";
       this.exeResultsTable = [];
+      this.exeResultDetail = {
+        status: "",
+        reasonCode: "",
+        message: "",
+        metricVersion: "",
+        runs: [],
+        aggregate: {},
+      };
       this.exePlanId = scope.planId;
       this.showedExePlan = {...scope};
       this.showedExePlan.userInfos = [];
@@ -969,9 +1010,28 @@ export default {
       this.dialogViewExeResultsVisible = true;
     },
     getExeResults(scope) {
-      getExeResult(this.exePlanId, scope.algId, scope.showedAlgName || scope.algName || "").then(res => {
-        this.exeResultsTable = res;
+      getExeResultDetail(this.exePlanId, scope.algId).then(res => {
+        const data = res && res.data ? res.data : {};
+        this.exeResultDetail = {
+          status: data.status || "",
+          reasonCode: data.reasonCode || "",
+          message: data.message || "",
+          metricVersion: data.metricVersion || "",
+          runs: data.runs || [],
+          aggregate: data.aggregate || {},
+        };
+        this.exeResultsTable = this.exeResultDetail.runs;
       });
+    },
+    formatMetric(value) {
+      if (value === undefined || value === null || value === "") {
+        return "-";
+      }
+      const number = Number(value);
+      if (Number.isNaN(number)) {
+        return String(value);
+      }
+      return number.toFixed(6);
     },
     openPlanLogsDialog() {
       this.dialogPlanLogsVisible = true;

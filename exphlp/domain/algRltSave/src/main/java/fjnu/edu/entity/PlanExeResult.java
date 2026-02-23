@@ -21,4 +21,11 @@ public class PlanExeResult {
     private long startTime;
     private long outputTime;
     private List<GenResult> genResults;
+    private String metricVersion;
+    private long metricComputedAt;
+    private String metricProblemTag;
+    private Double refPointF1;
+    private Double refPointF2;
+    private Integer refFrontSize;
+    private List<MetricRunCache> metricRuns;
 }

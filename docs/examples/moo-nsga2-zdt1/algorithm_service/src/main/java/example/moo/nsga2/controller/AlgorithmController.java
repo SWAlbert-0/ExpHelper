@@ -27,6 +27,7 @@ public class AlgorithmController {
         long runtimeMs = System.currentTimeMillis() - start;
 
         List<EachResult> out = new ArrayList<>();
+        out.add(new EachResult("problemFamily", "ZDT1", "string"));
         out.add(new EachResult("paretoSize", String.valueOf(pareto.size()), "int"));
         out.add(new EachResult("runtimeMs", String.valueOf(runtimeMs), "long"));
         if (!pareto.isEmpty()) {

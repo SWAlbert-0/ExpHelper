@@ -1,6 +1,7 @@
 package fjnu.edu.service;
 
 import fjnu.edu.entity.EachResult;
+import fjnu.edu.entity.ExeResultDetail;
 import fjnu.edu.entity.PlanExeResult;
 import org.springframework.stereotype.Service;
 
@@ -14,4 +15,6 @@ public interface AlgRltSaveService {
 
 
    PlanExeResult  getAlgSaveByAlgName(String planId, String algId, String algName);
+
+   ExeResultDetail getExeResultDetail(String planId, String algId);
 }
