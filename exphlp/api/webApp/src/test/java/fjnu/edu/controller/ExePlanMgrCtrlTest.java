@@ -1,6 +1,7 @@
 package fjnu.edu.controller;
 
 import fjnu.edu.exePlanMgr.entity.ExePlan;
+import fjnu.edu.exePlanMgr.entity.ExePlanDeleteResult;
 import fjnu.edu.exePlanMgr.entity.ExePlanLog;
 import fjnu.edu.exePlanMgr.entity.PlanPreCheckResult;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
@@ -80,6 +81,40 @@ class ExePlanMgrCtrlTest {
         Map<String, Object> data = (Map<String, Object>) response.get("data");
         assertEquals(true, data.get("accepted"));
         assertEquals(null, data.get("lastError"));
+    }
+
+    @Test
+    void deleteExePlanByIdReturns200WhenDeleted() {
+        ExePlanDeleteResult result = new ExePlanDeleteResult();
+        result.setDeletedCount(1L);
+        result.setExisted(true);
+        result.setNoop(false);
+        result.setVerified(true);
+        result.setBlocked(false);
+        when(exePlanMgrService.deleteExePlanById("p-del-1")).thenReturn(result);
+
+        Map<String, Object> response = controller.deleteExePlanById("p-del-1", new MockHttpServletRequest());
+
+        assertEquals(200, response.get("code"));
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        assertEquals(1L, data.get("deletedCount"));
+    }
+
+    @Test
+    void deleteExePlanByIdReturns200WhenRunningBlocked() {
+        ExePlanDeleteResult result = new ExePlanDeleteResult();
+        result.setDeletedCount(0L);
+        result.setExisted(true);
+        result.setNoop(true);
+        result.setVerified(true);
+        result.setBlocked(true);
+        when(exePlanMgrService.deleteExePlanById("p-del-2")).thenReturn(result);
+
+        Map<String, Object> response = controller.deleteExePlanById("p-del-2", new MockHttpServletRequest());
+
+        assertEquals(200, response.get("code"));
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        assertEquals(true, data.get("blocked"));
     }
 
     @Test

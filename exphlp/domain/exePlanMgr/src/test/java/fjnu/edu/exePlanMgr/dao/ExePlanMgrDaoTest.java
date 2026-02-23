@@ -1,6 +1,9 @@
 package fjnu.edu.exePlanMgr.dao;
 
+import com.mongodb.client.result.DeleteResult;
+import fjnu.edu.exePlanMgr.Constant.Constant;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
+import fjnu.edu.exePlanMgr.entity.ExePlanDeleteResult;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +37,7 @@ class ExePlanMgrDaoTest {
     }
 
     @Test
-    void getExePlanById_usesDualCriteriaWhenObjectIdFormat() {
+    void getExePlanById_usesObjectIdFallbackWhenCollectionUnavailable() {
         when(mongoTemplate.findOne(any(Query.class), eq(ExePlan.class), eq("exePlanMgr"))).thenReturn(new ExePlan());
 
         dao.getExePlanById("507f1f77bcf86cd799439011");
@@ -42,19 +45,42 @@ class ExePlanMgrDaoTest {
         ArgumentCaptor<Query> captor = ArgumentCaptor.forClass(Query.class);
         verify(mongoTemplate).findOne(captor.capture(), eq(ExePlan.class), eq("exePlanMgr"));
         Document query = captor.getValue().getQueryObject();
-        assertTrue(query.containsKey("$or"));
+        assertTrue(query.containsKey("_id"));
     }
 
     @Test
-    void getExePlanById_usesStringIdCriteriaWhenNonObjectIdFormat() {
-        when(mongoTemplate.findOne(any(Query.class), eq(ExePlan.class), eq("exePlanMgr"))).thenReturn(new ExePlan());
+    void getExePlanById_returnsNullWhenStringIdNotFound() {
+        ExePlan result = dao.getExePlanById("demo-plan-001");
+        assertNull(result);
+    }
 
-        dao.getExePlanById("demo-plan-001");
+    @Test
+    void deleteExePlanById_returnsDeletedWhenRemoveSuccess() {
+        ExePlan plan = new ExePlan();
+        plan.setExeState(Constant.NON_EXECUTION);
+        when(mongoTemplate.findOne(any(Query.class), eq(ExePlan.class), eq("exePlanMgr")))
+                .thenReturn(plan)
+                .thenReturn(null);
+        when(mongoTemplate.remove(any(Query.class), eq("exePlanMgr"))).thenReturn(DeleteResult.acknowledged(1L));
 
-        ArgumentCaptor<Query> captor = ArgumentCaptor.forClass(Query.class);
-        verify(mongoTemplate).findOne(captor.capture(), eq(ExePlan.class), eq("exePlanMgr"));
-        Document query = captor.getValue().getQueryObject();
-        assertFalse(query.containsKey("$or"));
-        assertEquals("demo-plan-001", query.get("_id"));
+        ExePlanDeleteResult result = dao.deleteExePlanById("6991e1f0392d9d656cb30553");
+
+        assertTrue(result.getDeletedCount() > 0);
+        assertFalse(result.isNoop());
+        assertTrue(result.isVerified());
+        assertFalse(result.isBlocked());
+    }
+
+    @Test
+    void deleteExePlanById_returnsBlockedWhenRunning() {
+        ExePlan plan = new ExePlan();
+        plan.setExeState(Constant.IN_EXECUTION);
+        when(mongoTemplate.findOne(any(Query.class), eq(ExePlan.class), eq("exePlanMgr"))).thenReturn(plan);
+
+        ExePlanDeleteResult result = dao.deleteExePlanById("6991e1f0392d9d656cb30553");
+
+        assertTrue(result.isBlocked());
+        assertTrue(result.isNoop());
+        verify(mongoTemplate, never()).remove(any(Query.class), eq("exePlanMgr"));
     }
 }

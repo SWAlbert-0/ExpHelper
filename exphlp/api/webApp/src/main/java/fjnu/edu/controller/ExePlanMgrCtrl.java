@@ -6,6 +6,7 @@ import fjnu.edu.auth.TraceContext;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
 import fjnu.edu.alglibmgr.service.AlgLibMgrService;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
+import fjnu.edu.exePlanMgr.entity.ExePlanDeleteResult;
 import fjnu.edu.exePlanMgr.entity.ExePlanLog;
 import fjnu.edu.exePlanMgr.entity.PlanPreCheckItem;
 import fjnu.edu.exePlanMgr.entity.PlanPreCheckResult;
@@ -75,11 +76,27 @@ public class ExePlanMgrCtrl {
     }
 
     @PostMapping("/deleteExePlanById")
-    public boolean deleteExePlanById(@RequestParam String planId){
+    public Map<String, Object> deleteExePlanById(@RequestParam String planId, HttpServletRequest request){
         if (!StringUtils.hasText(planId)) {
-            return false;
+            return ApiResponse.failed(request, 400, "planId不能为空", ErrorCode.PLAN_ID_EMPTY.code());
         }
-        return exePlanMgrService.deleteExePlanById(planId);
+        ExePlanDeleteResult deleteResult = exePlanMgrService.deleteExePlanById(planId);
+        long deletedCount = deleteResult == null ? 0L : deleteResult.getDeletedCount();
+        boolean existed = deleteResult != null && deleteResult.isExisted();
+        boolean noop = deleteResult == null || deleteResult.isNoop();
+        boolean verified = deleteResult == null || deleteResult.isVerified();
+        boolean blocked = deleteResult != null && deleteResult.isBlocked();
+        Map<String, Object> data = buildDeleteData(planId, deletedCount, existed, noop, verified, blocked);
+        if (blocked) {
+            return ApiResponse.ok(request, data, "删除失败，计划执行中");
+        }
+        if (noop && !verified) {
+            return ApiResponse.failed(request, 500, "删除未生效，请刷新后重试", ErrorCode.INTERNAL_ERROR.code(), data);
+        }
+        if (noop) {
+            return ApiResponse.ok(request, data, "记录已不存在，列表已同步");
+        }
+        return ApiResponse.ok(request, data, "删除成功");
     }
 
     @PostMapping("updateExePlanById")
@@ -358,6 +375,18 @@ public class ExePlanMgrCtrl {
             return null;
         }
         return latestPlan.getExecutionId().trim();
+    }
+
+    private Map<String, Object> buildDeleteData(String planId, long deletedCount, boolean existed, boolean noop,
+                                                boolean verified, boolean blocked) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("planId", planId);
+        data.put("deletedCount", deletedCount);
+        data.put("existed", existed);
+        data.put("noop", noop);
+        data.put("verified", verified);
+        data.put("blocked", blocked);
+        return data;
     }
 
 }

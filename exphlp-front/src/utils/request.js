@@ -96,6 +96,12 @@ service.interceptors.response.use(res => {
   }
 },
 error => {
+  const suppressStatuses = error && error.config && Array.isArray(error.config.silentHttpErrors)
+    ? error.config.silentHttpErrors : [];
+  const status = error && error.response ? error.response.status : null;
+  if (status && suppressStatuses.includes(status)) {
+    return Promise.reject(error);
+  }
   console.log("err" + error);
   const traceId = error && error.response && error.response.data && error.response.data.traceId;
   let { message } = error;

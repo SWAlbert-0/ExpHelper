@@ -2,6 +2,7 @@ package fjnu.edu.exePlanMgr.service;
 
 import fjnu.edu.exePlanMgr.entity.AlgRunCtx;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
+import fjnu.edu.exePlanMgr.entity.ExePlanDeleteResult;
 import fjnu.edu.exePlanMgr.entity.ExePlanLog;
 import fjnu.edu.exePlanMgr.entity.RunPara;
 import fjnu.edu.exePlanMgr.service.impl.ExePlanMgrServiceImpl;
@@ -21,7 +22,7 @@ public interface ExePlanMgrService {
 
     public ExePlan getExePlanById(String planId);
 
-    public boolean deleteExePlanById(String planId);
+    public ExePlanDeleteResult deleteExePlanById(String planId);
 
     public boolean updateExePlanById(ExePlan exeplan);
 

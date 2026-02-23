@@ -37,3 +37,17 @@ powershell -ExecutionPolicy Bypass -File docs/examples/moo-nsga2-zdt1/scripts/st
 ```
 
 若脚本返回成功，即表示服务 `nsga2-zdt1-ls` 已注册到 Nacos，可直接在网页继续操作。
+
+## 常见问题（本次版本新增）
+
+1. 执行结果弹窗提示“系统接口404异常”
+- 含义：当前后端镜像尚未包含 `GET /api/AlgRltSaveController/getExeResultDetail`。
+- 现行为：前端会自动降级到旧接口并展示基础结果（无完整指标），同时给出升级提示。
+- 建议操作：重建并重启 `webapp` 容器，确保前后端版本一致。
+
+2. 删除计划提示成功但列表未变化
+- 新版删除接口会返回结构化状态：`deletedCount/noop/blocked`。
+- 页面会按返回值显示：
+  - `deletedCount>0`：已实际删除。
+  - `noop=true`：记录已不存在，页面同步刷新。
+  - `blocked=true`：计划执行中，不允许删除。

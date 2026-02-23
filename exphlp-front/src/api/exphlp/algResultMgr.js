@@ -12,13 +12,14 @@ export function getExeResult(planId, algId, algName) {
   });
 }
 
-export function getExeResultDetail(planId, algId) {
+export function getExeResultDetail(planId, algId, options = {}) {
   return request({
     url: "/api/AlgRltSaveController/getExeResultDetail",
     method: "get",
     params: {
       planId: planId,
       algId: algId
-    }
+    },
+    ...options
   });
 }

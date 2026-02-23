@@ -527,7 +527,7 @@ import {
   getExePlans,
   updateExePlanById
 } from "@/api/exphlp/exePlanMgr";
-import {getExeResultDetail} from "@/api/exphlp/algResultMgr";
+import {getExeResult, getExeResultDetail} from "@/api/exphlp/algResultMgr";
 import ExecutionWizard from "@/views/planManage/components/ExecutionWizard";
 
 export default {
@@ -1010,7 +1010,7 @@ export default {
       this.dialogViewExeResultsVisible = true;
     },
     getExeResults(scope) {
-      getExeResultDetail(this.exePlanId, scope.algId).then(res => {
+      getExeResultDetail(this.exePlanId, scope.algId, { silentHttpErrors: [404] }).then(res => {
         const data = res && res.data ? res.data : {};
         this.exeResultDetail = {
           status: data.status || "",
@@ -1021,6 +1021,58 @@ export default {
           aggregate: data.aggregate || {},
         };
         this.exeResultsTable = this.exeResultDetail.runs;
+      }).catch((error) => {
+        const status = error && error.response ? error.response.status : null;
+        if (status !== 404) {
+          this.exeResultDetail = {
+            status: "MISSING",
+            reasonCode: "RESULT_FETCH_FAILED",
+            message: "执行结果读取失败",
+            metricVersion: "",
+            runs: [],
+            aggregate: {},
+          };
+          this.exeResultsTable = [];
+          return;
+        }
+        getExeResult(this.exePlanId, scope.algId, scope.algName).then((res) => {
+          const rows = Array.isArray(res) ? res : [];
+          this.exeResultsTable = rows.map((item, index) => {
+            return {
+              runIndex: index + 1,
+              probInstName: item.probInstName || "-",
+              runtimeMs: "-",
+              paretoSize: Array.isArray(item.eachResults) ? item.eachResults.length : 0,
+              hv: null,
+              igdPlus: null,
+              spreadDelta: null,
+              metricStatus: "LEGACY",
+              reasonCode: "LEGACY_ENDPOINT_FALLBACK",
+            };
+          });
+          this.exeResultDetail = {
+            status: "PARTIAL",
+            reasonCode: "LEGACY_ENDPOINT_FALLBACK",
+            message: "当前后端缺少详细结果接口，已降级展示基础结果，建议升级 webapp 镜像",
+            metricVersion: "-",
+            runs: this.exeResultsTable,
+            aggregate: { runCount: this.exeResultsTable.length },
+          };
+          this.$message({
+            type: "warning",
+            message: "执行结果接口版本较旧，已自动降级展示基础结果",
+          });
+        }).catch(() => {
+          this.exeResultDetail = {
+            status: "MISSING",
+            reasonCode: "RESULT_ENDPOINT_404",
+            message: "执行结果接口不可用，请升级后端容器",
+            metricVersion: "",
+            runs: [],
+            aggregate: {},
+          };
+          this.exeResultsTable = [];
+        });
       });
     },
     formatMetric(value) {
@@ -1221,7 +1273,19 @@ export default {
         })
           .then(() => {
             deleteExePlanById(scope.planId).then((res) => {
-              this.$message({type: "success", message: "删除成功",});
+              const data = res && res.data ? res.data : {};
+              if (data.blocked) {
+                this.$message({type: "warning", message: "删除失败，计划执行中",});
+                this.getExePlans();
+                return;
+              }
+              if (data.deletedCount > 0) {
+                this.$message({type: "success", message: `删除成功（planId=${scope.planId}）`,});
+              } else if (data.noop) {
+                this.$message({type: "success", message: `记录已不存在，列表已同步（planId=${scope.planId}）`,});
+              } else {
+                this.$message({type: "warning", message: "删除未生效，请刷新后重试",});
+              }
               this.getExePlans();
             });
           })
@@ -1254,11 +1318,34 @@ export default {
             type: "warning",
           })
             .then(() => {
-              for (var i = 0; i < this.multipleSelection1.length - 1; i++) {
-                deleteExePlanById(this.multipleSelection1[i].planId);
-              }
-              deleteExePlanById(this.multipleSelection1[this.multipleSelection1.length - 1].planId).then((res) => {
-                this.$message({type: "success", message: "删除成功",});
+              const deleteTasks = this.multipleSelection1.map((item) => deleteExePlanById(item.planId));
+              Promise.allSettled(deleteTasks).then((results) => {
+                let deletedCount = 0;
+                let noopCount = 0;
+                let blockedCount = 0;
+                let failedCount = 0;
+                for (let i = 0; i < results.length; i++) {
+                  const result = results[i];
+                  if (result.status !== "fulfilled") {
+                    failedCount += 1;
+                    continue;
+                  }
+                  const data = result.value && result.value.data ? result.value.data : {};
+                  if (data.blocked) {
+                    blockedCount += 1;
+                  } else if (Number(data.deletedCount) > 0) {
+                    deletedCount += 1;
+                  } else if (data.noop) {
+                    noopCount += 1;
+                  } else {
+                    failedCount += 1;
+                  }
+                }
+                if (failedCount === 0 && blockedCount === 0) {
+                  this.$message({type: "success", message: `删除完成：成功删除 ${deletedCount} 条，同步不存在 ${noopCount} 条`,});
+                } else {
+                  this.$message({type: "warning", message: `批量删除完成：删除 ${deletedCount} 条，同步不存在 ${noopCount} 条，执行中阻止 ${blockedCount} 条，失败 ${failedCount} 条`,});
+                }
                 this.getExePlans();
               });
             })

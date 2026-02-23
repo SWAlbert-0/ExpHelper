@@ -1,8 +1,11 @@
 package fjnu.edu.exePlanMgr.dao;
 
+import com.mongodb.client.MongoCollection;
 import fjnu.edu.exePlanMgr.Constant.Constant;
 import fjnu.edu.exePlanMgr.entity.ExePlanLog;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
+import fjnu.edu.exePlanMgr.entity.ExePlanDeleteResult;
+import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -66,9 +69,24 @@ public class ExePlanMgrDao {
         if (!StringUtils.hasText(planId)) {
             return null;
         }
-        Query query = new Query(buildIdCriteria(planId));
-        ExePlan exePlan = mongoTemplate.findOne(query, ExePlan.class, "exePlanMgr");
-        return exePlan;
+        ExePlan byRawId = findOneByRawStringId(planId);
+        if (byRawId != null) {
+            return byRawId;
+        }
+        if (ObjectId.isValid(planId)) {
+            ExePlan byObjectId = findOneByRawField("_id", new ObjectId(planId));
+            if (byObjectId != null) {
+                return byObjectId;
+            }
+        }
+        ExePlan byLegacyPlanId = findOneByRawField("planId", planId);
+        if (byLegacyPlanId != null) {
+            return byLegacyPlanId;
+        }
+        if (ObjectId.isValid(planId)) {
+            return findOneByRawField("planId", new ObjectId(planId));
+        }
+        return null;
     }
 
     //根据执行计划名字获取执行计划实体
@@ -86,19 +104,48 @@ public class ExePlanMgrDao {
     }
 
     //通过执行计划ID删除指定的执行计划
-    public boolean deleteExePlanById(String planId) {
+    public ExePlanDeleteResult deleteExePlanById(String planId) {
+        ExePlanDeleteResult result = new ExePlanDeleteResult();
         if (!StringUtils.hasText(planId)) {
-            return false;
+            result.setDeletedCount(0L);
+            result.setExisted(false);
+            result.setNoop(true);
+            result.setVerified(true);
+            result.setBlocked(false);
+            return result;
         }
-        Query query = new Query(buildIdCriteria(planId));
-        ExePlan exeplan = mongoTemplate.findOne(query, ExePlan.class, "exePlanMgr");
+        ExePlan exeplan = getExePlanById(planId);
         if (exeplan == null) {
-            return false;
+            result.setDeletedCount(0L);
+            result.setExisted(false);
+            result.setNoop(true);
+            result.setVerified(true);
+            result.setBlocked(false);
+            return result;
         }
-        if (exeplan.getExeState() != Constant.IN_EXECUTION) {                  //未在执行中
-            mongoTemplate.remove(query, "exePlanMgr");
+        if (exeplan.getExeState() == Constant.IN_EXECUTION) {
+            result.setDeletedCount(0L);
+            result.setExisted(true);
+            result.setNoop(true);
+            result.setVerified(true);
+            result.setBlocked(true);
+            return result;
         }
-        return true;
+        long deletedCount = 0L;
+        deletedCount += deleteByRawStringField("_id", planId);
+        deletedCount += deleteByRawStringField("planId", planId);
+        if (ObjectId.isValid(planId)) {
+            ObjectId objectId = new ObjectId(planId);
+            deletedCount += deleteByRawField("_id", objectId);
+            deletedCount += deleteByRawField("planId", objectId);
+        }
+        boolean stillExists = getExePlanById(planId) != null;
+        result.setDeletedCount(deletedCount);
+        result.setExisted(true);
+        result.setNoop(deletedCount <= 0);
+        result.setVerified(!stillExists);
+        result.setBlocked(false);
+        return result;
     }
 
     //通过Id修改执行计划
@@ -242,13 +289,62 @@ public class ExePlanMgrDao {
             return Criteria.where("_id").is(planId);
         }
         Criteria stringIdCriteria = Criteria.where("_id").is(planId);
+        Criteria legacyStringIdCriteria = Criteria.where("planId").is(planId);
         if (ObjectId.isValid(planId)) {
             return new Criteria().orOperator(
                     stringIdCriteria,
-                    Criteria.where("_id").is(new ObjectId(planId))
+                    Criteria.where("_id").is(new ObjectId(planId)),
+                    legacyStringIdCriteria,
+                    Criteria.where("planId").is(new ObjectId(planId))
             );
         }
-        return stringIdCriteria;
+        return new Criteria().orOperator(stringIdCriteria, legacyStringIdCriteria);
+    }
+
+    private ExePlan findOneByRawField(String fieldName, Object value) {
+        if (!StringUtils.hasText(fieldName)) {
+            return null;
+        }
+        Query query = new Query(Criteria.where(fieldName).is(value));
+        return mongoTemplate.findOne(query, ExePlan.class, "exePlanMgr");
+    }
+
+    private long deleteByRawField(String fieldName, Object value) {
+        if (!StringUtils.hasText(fieldName)) {
+            return 0L;
+        }
+        Query query = new Query(Criteria.where(fieldName).is(value));
+        return mongoTemplate.remove(query, "exePlanMgr").getDeletedCount();
+    }
+
+    private long deleteByRawStringField(String fieldName, String value) {
+        if (!StringUtils.hasText(fieldName) || value == null) {
+            return 0L;
+        }
+        MongoCollection<Document> collection = mongoTemplate.getCollection("exePlanMgr");
+        if (collection == null) {
+            return 0L;
+        }
+        return collection.deleteMany(new Document(fieldName, value)).getDeletedCount();
+    }
+
+    private ExePlan findOneByRawStringId(String planId) {
+        if (!StringUtils.hasText(planId)) {
+            return null;
+        }
+        MongoCollection<Document> collection = mongoTemplate.getCollection("exePlanMgr");
+        if (collection == null) {
+            return null;
+        }
+        Document byUnderscoreId = collection.find(new Document("_id", planId)).first();
+        if (byUnderscoreId != null) {
+            return mongoTemplate.getConverter().read(ExePlan.class, byUnderscoreId);
+        }
+        Document byLegacyPlanId = collection.find(new Document("planId", planId)).first();
+        if (byLegacyPlanId != null) {
+            return mongoTemplate.getConverter().read(ExePlan.class, byLegacyPlanId);
+        }
+        return null;
     }
 
 

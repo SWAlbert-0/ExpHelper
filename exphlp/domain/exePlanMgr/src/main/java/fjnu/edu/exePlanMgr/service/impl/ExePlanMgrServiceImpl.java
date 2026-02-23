@@ -3,6 +3,7 @@ package fjnu.edu.exePlanMgr.service.impl;
 import fjnu.edu.common.exception.BusinessException;
 import fjnu.edu.exePlanMgr.dao.ExePlanMgrDao;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
+import fjnu.edu.exePlanMgr.entity.ExePlanDeleteResult;
 import fjnu.edu.exePlanMgr.entity.ExePlanLog;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import fjnu.edu.probInstMgr.dao.ProbInstDao;
@@ -41,7 +42,7 @@ public class ExePlanMgrServiceImpl implements ExePlanMgrService {
     }
 
     @Override
-    public boolean deleteExePlanById(String planId) {
+    public ExePlanDeleteResult deleteExePlanById(String planId) {
         return exePlanMgrDao.deleteExePlanById(planId);
     }
 
