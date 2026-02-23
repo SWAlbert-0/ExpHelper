@@ -1,5 +1,12 @@
 <template>
   <div class="app-container">
+    <el-alert
+      title="执行建议：先维护问题实例，再到“执行计划管理”使用执行向导完成环境检查和计划执行。"
+      type="info"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 12px;"
+    />
     <!-- 添加 批量删除 查询-->
     <el-row>
       <el-col :span="2">

@@ -2,6 +2,7 @@ package fjnu.edu.controller;
 
 import fjnu.edu.alglibmgr.service.AlgLibMgrService;
 import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
+import fjnu.edu.alglibmgr.entity.AlgInfo;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ class AlgLibMgrCtrlTest {
         result.setDeletedCount(1L);
         result.setRepaired(false);
         result.setNoop(false);
+        result.setVerified(true);
         when(exePlanMgrService.countPlansByAlgId("alg-1")).thenReturn(0L);
         when(algLibMgrService.deleteAlgInfoById("alg-1")).thenReturn(result);
 
@@ -55,6 +57,7 @@ class AlgLibMgrCtrlTest {
         result.setDeletedCount(0L);
         result.setRepaired(false);
         result.setNoop(true);
+        result.setVerified(true);
         when(exePlanMgrService.countPlansByAlgId("alg-missing")).thenReturn(0L);
         when(algLibMgrService.deleteAlgInfoById("alg-missing")).thenReturn(result);
 
@@ -75,6 +78,7 @@ class AlgLibMgrCtrlTest {
         result.setDeletedCount(1L);
         result.setRepaired(true);
         result.setNoop(false);
+        result.setVerified(true);
         when(exePlanMgrService.countPlansByAlgId("legacy-alg")).thenReturn(0L);
         when(algLibMgrService.deleteAlgInfoById("legacy-alg")).thenReturn(result);
 
@@ -85,6 +89,25 @@ class AlgLibMgrCtrlTest {
         assertEquals("legacy-alg", data.get("algId"));
         assertEquals(1L, data.get("deletedCount"));
         assertEquals(true, data.get("repaired"));
+    }
+
+    @Test
+    void deleteAlgByIdReturns500WhenNoopButUnverified() {
+        AlgDeleteResult result = new AlgDeleteResult();
+        result.setDeletedCount(0L);
+        result.setRepaired(false);
+        result.setNoop(true);
+        result.setVerified(false);
+        when(exePlanMgrService.countPlansByAlgId("alg-bad")).thenReturn(0L);
+        when(algLibMgrService.deleteAlgInfoById("alg-bad")).thenReturn(result);
+
+        Map<String, Object> response = controller.deleteAlgInfoById("alg-bad", new MockHttpServletRequest());
+
+        assertEquals(500, response.get("code"));
+        assertEquals("INTERNAL_ERROR", response.get("errorCode"));
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        assertEquals(false, data.get("verified"));
+        assertEquals(true, data.get("noop"));
     }
 
     @Test
@@ -106,5 +129,20 @@ class AlgLibMgrCtrlTest {
         Map<String, Object> data = (Map<String, Object>) response.get("data");
         assertEquals(true, data.get("blocked"));
         assertEquals(2L, data.get("refPlanCount"));
+    }
+
+    @Test
+    void generateDeployTemplateReturns200() {
+        AlgInfo info = new AlgInfo();
+        info.setAlgId("alg-2");
+        info.setAlgName("nsga2");
+        info.setServiceName("nsga2-zdt1-ls");
+        when(algLibMgrService.getAlgInfoById("alg-2")).thenReturn(info);
+
+        Map<String, Object> response = controller.generateDeployTemplate("alg-2", new MockHttpServletRequest());
+
+        assertEquals(200, response.get("code"));
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        assertEquals("nsga2-zdt1-ls", data.get("serviceName"));
     }
 }

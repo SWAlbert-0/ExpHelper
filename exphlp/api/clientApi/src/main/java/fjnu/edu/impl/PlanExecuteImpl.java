@@ -11,6 +11,8 @@ import fjnu.edu.exePlanMgr.entity.AlgRunCtx;
 import fjnu.edu.exePlanMgr.entity.AlgRunInfo;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
 import fjnu.edu.exePlanMgr.entity.ExePlanLog;
+import fjnu.edu.exePlanMgr.entity.PlanPreCheckItem;
+import fjnu.edu.exePlanMgr.entity.PlanPreCheckResult;
 import fjnu.edu.exePlanMgr.entity.RunPara;
 import fjnu.edu.intf.PlanExecuteService;
 import fjnu.edu.mail.EmailService;
@@ -30,9 +32,11 @@ import org.springframework.web.client.RestTemplate;
 import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.UUID;
 
 @Service
 public class PlanExecuteImpl implements PlanExecuteService {
@@ -64,6 +68,10 @@ public class PlanExecuteImpl implements PlanExecuteService {
             new ThreadPoolExecutor.AbortPolicy()
     );
     private final Set<String> runningPlans = ConcurrentHashMap.newKeySet();
+    private static final String PRECHECK_NO_ALG = "PLAN_PRECHECK_NO_ALG";
+    private static final String PRECHECK_SERVICE_NAME_EMPTY = "ALG_SERVICE_NAME_EMPTY";
+    private static final String PRECHECK_SERVICE_NO_INSTANCE = "ALG_SERVICE_NO_INSTANCE";
+    private static final String PRECHECK_NACOS_UNREACHABLE = "NACOS_UNREACHABLE";
 
     @org.springframework.beans.factory.annotation.Value("${alg.call.retry-times:1}")
     private int retryTimes;
@@ -81,13 +89,17 @@ public class PlanExecuteImpl implements PlanExecuteService {
             runningPlans.remove(planId);
             return false;
         }
-        String preCheckError = preCheckServiceReachability(exePlan);
-        if (preCheckError != null) {
+        String executionId = newExecutionId();
+        exePlan.setExecutionId(executionId);
+        exePlanMgrDao.updateExePlanById(exePlan);
+        PlanPreCheckResult preCheckResult = preCheckPlanReachability(exePlan, true);
+        if (preCheckResult == null || !preCheckResult.isPass()) {
+            String preCheckError = preCheckResult == null ? "执行前检查失败" : preCheckResult.getMessage();
             markFailed(exePlan, preCheckError);
             exePlan.setExeStartTime(System.currentTimeMillis());
             exePlan.setExeEndTime(System.currentTimeMillis());
             exePlanMgrDao.updateExePlanById(exePlan);
-            appendPlanLog(planId, "ERROR", "PLAN_FAIL", preCheckError, null, null, null);
+            appendPlanLog(planId, executionId, "ERROR", "PLAN_FAIL", preCheckError, null, null, null, null);
             runningPlans.remove(planId);
             return false;
         }
@@ -96,14 +108,14 @@ public class PlanExecuteImpl implements PlanExecuteService {
         exePlan.setExeEndTime(0L);
         exePlan.setLastError(null);
         exePlanMgrDao.updateExePlanById(exePlan);
-        appendPlanLog(planId, "INFO", "PLAN_START", "计划开始执行", null, null, null);
+        appendPlanLog(planId, executionId, "INFO", "PLAN_START", "计划开始执行", null, null, null, null);
 
         try {
             planExecutor.execute(() -> runPlan(planId));
             return true;
         } catch (RejectedExecutionException ex) {
             markFailed(exePlan, "执行任务队列已满");
-            appendPlanLog(planId, "ERROR", "PLAN_FAIL", "执行任务队列已满", null, null, null);
+            appendPlanLog(planId, executionId, "ERROR", "PLAN_FAIL", "执行任务队列已满", null, null, null, null);
             exePlan.setExeEndTime(System.currentTimeMillis());
             exePlanMgrDao.updateExePlanById(exePlan);
             runningPlans.remove(planId);
@@ -118,6 +130,7 @@ public class PlanExecuteImpl implements PlanExecuteService {
             return;
         }
         try {
+            String executionId = exePlan.getExecutionId();
             List<ProbInst> probInsts = new ArrayList<>();
             for (String probInstId : exePlan.getProbInstIds()) {
                 ProbInst probInst = probInstDao.getProbInstByID(probInstId);
@@ -135,9 +148,9 @@ public class PlanExecuteImpl implements PlanExecuteService {
                     throw new IllegalStateException("算法服务未注册: " + algId);
                 }
                 String serverURL = "http://" + serviceName;
-                appendPlanLog(planId, "INFO", "ALG_START",
+                appendPlanLog(planId, executionId, "INFO", "ALG_START",
                         "开始执行算法[" + algRunInfo.getAlgName() + "]，服务[" + serviceName + "]",
-                        algId, null, null);
+                        algId, null, null, "serviceUrl=" + serverURL);
 
                 List<RunPara> runParas = algRunInfo.getRunParas();
                 int runNum = algRunInfo.getRunNum();
@@ -148,21 +161,21 @@ public class PlanExecuteImpl implements PlanExecuteService {
 
                 for (int time = 0; time < runNum; time++) {
                     for (ProbInst probInst : probInsts) {
-                        appendPlanLog(planId, "INFO", "ALG_CALL",
+                        appendPlanLog(planId, executionId, "INFO", "ALG_CALL",
                                 "调用算法，run=" + (time + 1) + "，问题实例=" + probInst.getInstName(),
-                                algId, time + 1, probInst.getInstId());
+                                algId, time + 1, probInst.getInstId(), null);
                         AlgRunCtx algRunCtx = buildAlgRunCtx(planId, algId, probInst, runParas, time + 1);
                         HttpEntity<AlgRunCtx> request = new HttpEntity<>(algRunCtx);
-                        List<EachResult> eachResults = invokeAlgWithRetry(planId, algId, time + 1, probInst.getInstId(), serverURL, request);
+                        List<EachResult> eachResults = invokeAlgWithRetry(planId, executionId, algId, time + 1, probInst.getInstId(), serverURL, request);
 
                         GenResult genResult = new GenResult();
                         genResult.setEachResults(eachResults);
                         genResult.setProbInstId(probInst.getInstId());
                         genResult.setOutTime(System.currentTimeMillis());
                         genResults.add(genResult);
-                        appendPlanLog(planId, "INFO", "ALG_CALL",
+                        appendPlanLog(planId, executionId, "INFO", "ALG_CALL",
                                 "算法调用成功，run=" + (time + 1) + "，实例=" + probInst.getInstName(),
-                                algId, time + 1, probInst.getInstId());
+                                algId, time + 1, probInst.getInstId(), "resultSize=" + eachResults.size());
                     }
                 }
 
@@ -172,18 +185,20 @@ public class PlanExecuteImpl implements PlanExecuteService {
                 planExeResult.setOutputTime(System.currentTimeMillis());
                 planExeResult.setGenResults(genResults);
                 algRltSaveService.insertPlanExeResult(planExeResult);
-                appendPlanLog(planId, "INFO", "ALG_DONE",
+                appendPlanLog(planId, executionId, "INFO", "ALG_DONE",
                         "算法[" + algRunInfo.getAlgName() + "]执行完成，共生成结果条数=" + genResults.size(),
-                        algId, null, null);
+                        algId, null, null, null);
             }
 
             exePlan.setExeState(Constant.NORMAL_TERMINATION);
             exePlan.setLastError(null);
-            appendPlanLog(planId, "INFO", "PLAN_DONE", "计划执行完成", null, null, null);
+            appendPlanLog(planId, executionId, "INFO", "PLAN_DONE", "计划执行完成", null, null, null, null);
             notifyPlanResult(exePlan, true);
         } catch (Exception ex) {
             markFailed(exePlan, extractErrorMessage(ex));
-            appendPlanLog(planId, "ERROR", "PLAN_FAIL", "计划执行失败: " + extractErrorMessage(ex), null, null, null);
+            appendPlanLog(planId, exePlan.getExecutionId(), "ERROR", "PLAN_FAIL",
+                    "计划执行失败: " + extractErrorMessage(ex), null, null, null,
+                    ex.getClass().getSimpleName());
             notifyPlanResult(exePlan, false);
             return;
         } finally {
@@ -207,7 +222,19 @@ public class PlanExecuteImpl implements PlanExecuteService {
         return algRunCtx;
     }
 
-    private List<EachResult> invokeAlgWithRetry(String planId, String algId, int runIndex, String probInstId,
+    @Override
+    public PlanPreCheckResult preCheck(String planId) {
+        if (planId == null || planId.trim().isEmpty()) {
+            return PlanPreCheckResult.failed(PRECHECK_NO_ALG, "执行前检查失败: planId不能为空", Collections.emptyList());
+        }
+        ExePlan exePlan = exePlanMgrDao.getExePlanById(planId);
+        if (exePlan == null) {
+            return PlanPreCheckResult.failed("PLAN_NOT_FOUND", "执行前检查失败: 执行计划不存在", Collections.emptyList());
+        }
+        return preCheckPlanReachability(exePlan, true);
+    }
+
+    private List<EachResult> invokeAlgWithRetry(String planId, String executionId, String algId, int runIndex, String probInstId,
                                                 String serverURL, HttpEntity<AlgRunCtx> request) {
         RuntimeException lastException = null;
         int totalAttempts = retryTimes + 1;
@@ -221,9 +248,9 @@ public class PlanExecuteImpl implements PlanExecuteService {
                 return Arrays.asList(body);
             } catch (RuntimeException ex) {
                 lastException = ex;
-                appendPlanLog(planId, "WARN", "RETRY",
+                appendPlanLog(planId, executionId, "WARN", "RETRY",
                         "算法调用失败，第" + attempt + "/" + totalAttempts + "次: " + extractErrorMessage(ex),
-                        algId, runIndex, probInstId);
+                        algId, runIndex, probInstId, "serviceUrl=" + serverURL);
             }
         }
         String detail = extractErrorMessage(lastException);
@@ -280,35 +307,106 @@ public class PlanExecuteImpl implements PlanExecuteService {
         return message.trim();
     }
 
-    private void appendPlanLog(String planId, String level, String stage, String message,
-                               String algId, Integer runIndex, String probInstId) {
+    private void appendPlanLog(String planId, String executionId, String level, String stage, String message,
+                               String algId, Integer runIndex, String probInstId, String details) {
         ExePlanLog log = new ExePlanLog();
         log.setPlanId(planId);
+        log.setExecutionId(executionId);
         log.setLevel(level);
         log.setStage(stage);
         log.setMessage(message);
         log.setAlgId(algId);
         log.setRunIndex(runIndex);
         log.setProbInstId(probInstId);
+        log.setDetails(details);
         log.setTs(System.currentTimeMillis());
         exePlanMgrDao.appendPlanLog(log);
     }
 
-    private String preCheckServiceReachability(ExePlan exePlan) {
+    private PlanPreCheckResult preCheckPlanReachability(ExePlan exePlan, boolean withRetry) {
         if (exePlan == null || exePlan.getAlgRunInfos() == null || exePlan.getAlgRunInfos().isEmpty()) {
-            return "执行前检查失败: 未配置算法";
+            return PlanPreCheckResult.failed(PRECHECK_NO_ALG, "执行前检查失败: 未配置算法", Collections.emptyList());
         }
+        List<PlanPreCheckItem> items = new ArrayList<>();
+        int maxAttempts = withRetry ? 3 : 1;
         for (AlgRunInfo algRunInfo : exePlan.getAlgRunInfos()) {
             String algId = algRunInfo.getAlgId();
             String serviceName = algLibMgrService.getServiceNameById(algId);
+
+            PlanPreCheckItem item = new PlanPreCheckItem();
+            item.setAlgId(algId);
+            item.setAlgName(algRunInfo.getAlgName());
+            item.setServiceName(serviceName == null ? "" : serviceName.trim());
+            item.setInstanceCount(0);
+            item.setReachable(false);
+
             if (serviceName == null || serviceName.trim().isEmpty()) {
-                return "执行前检查失败: 算法服务未注册: " + algId;
+                item.setErrorCode(PRECHECK_SERVICE_NAME_EMPTY);
+                item.setDiagnosis("算法未配置服务名或服务名为空");
+                item.setSuggestion("请在算法库中填写正确 serviceName，并与 Nacos 注册名保持一致");
+                items.add(item);
+                return PlanPreCheckResult.failed(PRECHECK_SERVICE_NAME_EMPTY,
+                        "执行前检查失败: 算法服务未注册: " + algId, items);
             }
-            List<ServiceInstance> instances = discoveryClient.getInstances(serviceName);
-            if (instances == null || instances.isEmpty()) {
-                return "执行前检查失败: 服务[" + serviceName + "]在Nacos中无可用实例";
+
+            boolean available = false;
+            String failureCode = PRECHECK_SERVICE_NO_INSTANCE;
+            String diagnosis = "";
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    List<ServiceInstance> instances = discoveryClient.getInstances(serviceName);
+                    int count = instances == null ? 0 : instances.size();
+                    item.setInstanceCount(count);
+                    if (count > 0) {
+                        available = true;
+                        break;
+                    }
+                    diagnosis = "服务已配置，但在Nacos中无可用实例";
+                    if (attempt < maxAttempts) {
+                        sleepQuietly(800L);
+                    }
+                } catch (RuntimeException ex) {
+                    failureCode = PRECHECK_NACOS_UNREACHABLE;
+                    diagnosis = "调用Nacos失败: " + extractErrorMessage(ex);
+                    if (attempt < maxAttempts) {
+                        sleepQuietly(800L);
+                    }
+                }
             }
+
+            if (!available) {
+                item.setErrorCode(failureCode);
+                item.setDiagnosis(diagnosis);
+                if (PRECHECK_NACOS_UNREACHABLE.equals(failureCode)) {
+                    item.setSuggestion("请确认Nacos地址可达，并检查 webapp 的 NACOS_SERVER_ADDR 配置");
+                    items.add(item);
+                    return PlanPreCheckResult.failed(PRECHECK_NACOS_UNREACHABLE,
+                            "执行前检查失败: Nacos不可用或不可达", items);
+                }
+                item.setSuggestion("请先启动算法服务并确认服务名与Nacos注册名一致");
+                items.add(item);
+                return PlanPreCheckResult.failed(PRECHECK_SERVICE_NO_INSTANCE,
+                        "执行前检查失败: 服务[" + serviceName + "]在Nacos中无可用实例", items);
+            }
+
+            item.setReachable(true);
+            item.setErrorCode("");
+            item.setDiagnosis("服务可用");
+            item.setSuggestion("");
+            items.add(item);
         }
-        return null;
+        return PlanPreCheckResult.passed(items);
+    }
+
+    private void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private String newExecutionId() {
+        return System.currentTimeMillis() + "-" + UUID.randomUUID().toString().replace("-", "");
     }
 }

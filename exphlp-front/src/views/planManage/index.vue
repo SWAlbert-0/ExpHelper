@@ -198,6 +198,13 @@
     <div v-show="showExePlanTableVisible">
       <el-container>
         <el-header style="padding-top: 20px" height="170px">
+          <el-alert
+            title="推荐使用“执行向导”：问题实例 -> 算法 -> 环境检查 -> 一键执行。服务名必须与 Nacos 注册名一致。"
+            type="info"
+            :closable="false"
+            show-icon
+            style="margin-bottom: 12px;"
+          />
           <el-form :model="search" :inline="true" class="demo-form-inline" align="center">
             <el-row type="flex">
               <el-col :span="5">
@@ -249,6 +256,7 @@
             <el-col :span="12">
               <div class="grid-content bg-purple">
                 <el-button type="success" icon="el-icon-plus" @click="addExePlan()">添加</el-button>
+                <el-button type="primary" icon="el-icon-magic-stick" @click="wizardVisible = true">执行向导</el-button>
                 <el-button type="danger" icon="el-icon-delete" @click="deleteBatchExePlan()">批量删除</el-button>
               </div>
             </el-col>
@@ -424,6 +432,20 @@
             :before-close="closePlanLogsDialog"
             :close-on-click-modal="false"
           >
+            <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <el-radio-group v-model="planLogScope" size="mini" @change="switchPlanLogScope">
+                  <el-radio-button label="latest">最新执行</el-radio-button>
+                  <el-radio-button label="all">全部历史</el-radio-button>
+                </el-radio-group>
+                <span style="margin-left: 12px; color: #909399;">执行批次：{{ planLogExecutionId || '-' }}</span>
+              </div>
+              <div>
+                <el-button size="mini" icon="el-icon-refresh" @click="fetchPlanLogs(true)">刷新</el-button>
+                <el-button size="mini" icon="el-icon-download" @click="exportPlanLogsAs('csv')">导出CSV</el-button>
+                <el-button size="mini" icon="el-icon-download" @click="exportPlanLogsAs('json')">导出JSON</el-button>
+              </div>
+            </div>
             <el-table :data="planLogs" border fit height="420">
               <el-table-column property="seq" label="序号" width="90" align="center"></el-table-column>
               <el-table-column property="ts" label="时间" width="180" align="center">
@@ -433,15 +455,33 @@
               </el-table-column>
               <el-table-column property="level" label="级别" width="90" align="center"></el-table-column>
               <el-table-column property="stage" label="阶段" width="120" align="center"></el-table-column>
-              <el-table-column property="message" label="内容" min-width="320"></el-table-column>
+              <el-table-column property="executionId" label="批次ID" width="220" show-overflow-tooltip></el-table-column>
+              <el-table-column property="algId" label="算法ID" width="160" show-overflow-tooltip></el-table-column>
+              <el-table-column property="runIndex" label="run" width="70" align="center"></el-table-column>
+              <el-table-column property="probInstId" label="实例ID" width="160" show-overflow-tooltip></el-table-column>
+              <el-table-column property="message" label="内容" min-width="260"></el-table-column>
+              <el-table-column property="details" label="详情" min-width="180" show-overflow-tooltip></el-table-column>
             </el-table>
             <div style="margin-top: 12px; text-align: right;">
+              <el-button size="mini" type="primary" @click="runPreCheckFromLogs">执行前检查</el-button>
+              <el-button
+                size="mini"
+                type="warning"
+                :disabled="showedExePlan.exeState !== '异常结束'"
+                @click="reExecutePlan(showedExePlan)"
+              >重新执行</el-button>
               <span>计划状态：{{ showedExePlan.exeState }}</span>
             </div>
           </el-dialog>
         </el-main>
       </el-container>
     </div>
+    <execution-wizard
+      :visible.sync="wizardVisible"
+      :prob-insts="probInsts"
+      :alg-infos="algInfos"
+      @refresh="clearSearchCondition"
+    />
   </div>
 
 
@@ -455,14 +495,18 @@ import {getUserList} from "@/api/exphlp/platMgr";
 import {
   addExePlan, countAllExePlans,
   deleteExePlanById, execute,
+  exportPlanLogs,
   getPlanLogs,
+  preCheck,
   getExePlanByName,
   getExePlans,
   updateExePlanById
 } from "@/api/exphlp/exePlanMgr";
 import {getExeResult} from "@/api/exphlp/algResultMgr";
+import ExecutionWizard from "@/views/planManage/components/ExecutionWizard";
 
 export default {
+  components: { ExecutionWizard },
   data() {
     return {
       probInsts: [],
@@ -535,6 +579,8 @@ export default {
       dialogPlanLogsVisible: false,
       planLogs: [],
       planLogAfterSeq: 0,
+      planLogScope: "latest",
+      planLogExecutionId: "",
       planLogTimer: null,
       showedExePlan: {
         planName: '',
@@ -561,6 +607,7 @@ export default {
       },
       treeData: [],
       duplicateParaFlag : false,
+      wizardVisible: false,
     }
   },
   created() {
@@ -871,6 +918,8 @@ export default {
       this.dialogPlanLogsVisible = false;
       this.planLogs = [];
       this.planLogAfterSeq = 0;
+      this.planLogExecutionId = "";
+      this.planLogScope = "latest";
       this.exeResultsTable = [];
       this.exePlanId = scope.planId;
       this.showedExePlan = {...scope};
@@ -916,14 +965,11 @@ export default {
       this.dialogViewRunParasVisible = true;
     },
     showExeResults(scope) {
-      console.log(this.exePlanId);
-      console.log(scope.algId);
-      console.log(scope.showedAlgName);
       this.getExeResults(scope);
       this.dialogViewExeResultsVisible = true;
     },
     getExeResults(scope) {
-      getExeResult(this.exePlanId, scope.algId, scope.showedAlgName).then(res => {
+      getExeResult(this.exePlanId, scope.algId, scope.showedAlgName || scope.algName || "").then(res => {
         this.exeResultsTable = res;
       });
     },
@@ -931,6 +977,8 @@ export default {
       this.dialogPlanLogsVisible = true;
       this.planLogs = [];
       this.planLogAfterSeq = 0;
+      this.planLogExecutionId = this.showedExePlan.executionId || "";
+      this.planLogScope = "latest";
       this.fetchPlanLogs(true);
       if (this.showedExePlan.exeState === "执行中") {
         this.startPlanLogPolling();
@@ -960,9 +1008,12 @@ export default {
         return;
       }
       const afterSeq = reset ? 0 : this.planLogAfterSeq;
-      getPlanLogs(this.exePlanId, afterSeq, 200).then(res => {
+      getPlanLogs(this.exePlanId, afterSeq, 200, this.planLogExecutionId, this.planLogScope).then(res => {
         const data = res && res.data ? res.data : {};
         const items = data.items || [];
+        if (data.executionId !== undefined && data.executionId !== null) {
+          this.planLogExecutionId = data.executionId;
+        }
         if (reset) {
           this.planLogs = items;
         } else if (items.length > 0) {
@@ -987,9 +1038,70 @@ export default {
         }
       });
     },
+    switchPlanLogScope() {
+      this.planLogs = [];
+      this.planLogAfterSeq = 0;
+      this.fetchPlanLogs(true);
+      if (this.showedExePlan.exeState === "执行中" && this.planLogScope === "latest") {
+        this.startPlanLogPolling();
+      } else {
+        this.stopPlanLogPolling();
+      }
+    },
+    exportPlanLogsAs(format) {
+      if (!this.exePlanId) {
+        return;
+      }
+      exportPlanLogs(this.exePlanId, this.planLogExecutionId, this.planLogScope, 10000).then(res => {
+        const data = res && res.data ? res.data : {};
+        const items = data.items || [];
+        const scope = data.scope || this.planLogScope;
+        const executionId = data.executionId || this.planLogExecutionId || "all";
+        if (format === "json") {
+          const content = JSON.stringify(items, null, 2);
+          this.downloadTextFile(`plan-logs-${this.exePlanId}-${scope}-${executionId}.json`, content, "application/json;charset=utf-8");
+          return;
+        }
+        const header = ["seq", "time", "level", "stage", "executionId", "algId", "runIndex", "probInstId", "message", "details"];
+        const lines = [header.join(",")];
+        for (let i = 0; i < items.length; i++) {
+          const row = items[i] || {};
+          const values = [
+            row.seq,
+            this.formatTimestampToDateTime(row.ts),
+            row.level,
+            row.stage,
+            row.executionId,
+            row.algId,
+            row.runIndex,
+            row.probInstId,
+            row.message,
+            row.details,
+          ].map((v) => {
+            const text = v === undefined || v === null ? "" : String(v);
+            return `"${text.replace(/"/g, '""')}"`;
+          });
+          lines.push(values.join(","));
+        }
+        this.downloadTextFile(`plan-logs-${this.exePlanId}-${scope}-${executionId}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
+      });
+    },
+    downloadTextFile(filename, content, mimeType) {
+      const blob = new Blob([content], { type: mimeType || "text/plain;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
     backFromView() {
       this.stopPlanLogPolling();
       this.dialogPlanLogsVisible = false;
+      this.planLogExecutionId = "";
+      this.planLogScope = "latest";
       this.viewVisible = false;
       this.showExePlanTableVisible = true;
     },
@@ -1149,7 +1261,9 @@ export default {
       });
     },
     executePlan(scope, isRetry) {
-      execute(scope.planId).then(res => {
+      preCheck(scope.planId).then(() => {
+        return execute(scope.planId);
+      }).then(res => {
         const data = res && res.data ? res.data : {};
         if (data.accepted) {
           scope.exeState = '执行中';
@@ -1165,6 +1279,49 @@ export default {
           this.$message({type: "warning", message: msg,});
         }
         this.getExePlans();
+      }).catch((error) => {
+        const check = error && error.response && error.response.data ? error.response.data : null;
+        if (check && (check.errorCode === "ALG_SERVICE_NO_INSTANCE" || check.errorCode === "ALG_SERVICE_NAME_EMPTY" || check.errorCode === "NACOS_UNREACHABLE")) {
+          this.showPreCheckFailure(check);
+          this.getExePlans();
+          return;
+        }
+        this.$message({
+          type: "error",
+          message: isRetry ? "计划重新执行失败，请稍后重试" : "计划执行失败，请稍后重试",
+        });
+      });
+    },
+    showPreCheckFailure(resp) {
+      const data = resp && resp.data ? resp.data : {};
+      const items = data && data.items ? data.items : [];
+      const first = items.length > 0 ? items[0] : null;
+      const msg = data && data.message ? data.message : "执行前检查失败";
+      const suggestion = first && first.suggestion ? first.suggestion : "";
+      const diagnosis = first && first.diagnosis ? first.diagnosis : "";
+      const code = resp && resp.errorCode ? resp.errorCode : "";
+      const quickStart = (code === "ALG_SERVICE_NO_INSTANCE" || code === "NACOS_UNREACHABLE")
+        ? "可先执行：powershell -ExecutionPolicy Bypass -File docs/examples/moo-nsga2-zdt1/scripts/start-alg-with-nacos.ps1"
+        : "";
+      const detail = [msg, diagnosis, suggestion, quickStart].filter(Boolean).join("；");
+      this.$alert(detail, "执行前检查未通过", {
+        confirmButtonText: "知道了",
+        type: "warning",
+      });
+    },
+    runPreCheckFromLogs() {
+      if (!this.showedExePlan || !this.showedExePlan.planId) {
+        return;
+      }
+      preCheck(this.showedExePlan.planId).then(() => {
+        this.$message({ type: "success", message: "执行前检查通过" });
+      }).catch((error) => {
+        const payload = error && error.response && error.response.data ? error.response.data : null;
+        if (payload) {
+          this.showPreCheckFailure(payload);
+          return;
+        }
+        this.$message({ type: "error", message: "执行前检查失败" });
       });
     },
     formatTimestampToDateTime(timestamp) {

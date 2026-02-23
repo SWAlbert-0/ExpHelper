@@ -64,14 +64,47 @@ export function execute(planId) {
   });
 }
 
-export function getPlanLogs(planId, afterSeq, limit) {
+export function preCheck(planId) {
+  return request({
+    url: "/api/ExePlanController/preCheck",
+    method: "get",
+    params: {
+      planId: planId
+    }
+  });
+}
+
+export function wizardPrecheck(params) {
+  return request({
+    url: "/api/ExePlanController/wizardPrecheck",
+    method: "get",
+    params
+  });
+}
+
+export function getPlanLogs(planId, afterSeq, limit, executionId, scope = "latest") {
   return request({
     url: "/api/ExePlanController/getPlanLogs",
     method: "get",
     params: {
       planId: planId,
       afterSeq: afterSeq,
-      limit: limit
+      limit: limit,
+      executionId: executionId,
+      scope: scope
+    }
+  });
+}
+
+export function exportPlanLogs(planId, executionId, scope = "latest", limit = 5000) {
+  return request({
+    url: "/api/ExePlanController/exportPlanLogs",
+    method: "get",
+    params: {
+      planId: planId,
+      executionId: executionId,
+      scope: scope,
+      limit: limit,
     }
   });
 }

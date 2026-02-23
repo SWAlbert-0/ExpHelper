@@ -1,5 +1,12 @@
 <template>
   <div class="app-container">
+    <el-alert
+      title="执行建议：算法服务名必须与 Nacos 注册名一致。完成后可到“执行计划管理”使用执行向导自动检查并执行。"
+      type="info"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 12px;"
+    />
     <!--添加 批量删除 查询-->
     <el-row>
       <el-col :span="2">
@@ -553,6 +560,8 @@ export default {
               this.$message({type: "success", message: `删除成功（algId=${algId}${repairedText}）`,});
             } else if (state.noop) {
               this.$message({type: "info", message: `记录已不存在（algId=${algId}），列表已同步`,});
+            } else {
+              this.$message({type: "error", message: `删除失败（algId=${algId}）：后端未确认删除`,});
             }
           }).catch((error) => {
             this.$message({type: "error", message: this.extractDeleteErrorMessage(error, algId),});
@@ -756,8 +765,9 @@ export default {
     extractDeleteState(res, algId) {
       const deletedCount = this.extractDeletedCount(res);
       const repaired = this.isRepairedDelete(res);
-      const noop = this.isNoopDelete(res) || deletedCount <= 0;
-      return { algId: algId, deletedCount: deletedCount, repaired: repaired, noop: noop };
+      const verified = !(res && res.data && res.data.verified === false);
+      const noop = this.isNoopDelete(res) && verified;
+      return { algId: algId, deletedCount: deletedCount, repaired: repaired, noop: noop, verified: verified };
     },
     extractBackendErrorCode(error) {
       return error && error.response && error.response.data ? error.response.data.errorCode : "";
@@ -793,6 +803,9 @@ export default {
         return `删除失败（algId=${algId}）：算法已被执行计划引用，请先解除关联`;
       }
       const message = this.extractErrorMessage(error, "");
+      if (message.includes("删除未生效")) {
+        return `删除失败（algId=${algId}）：后端未确认删除，请刷新后重试`;
+      }
       return message ? `删除失败（algId=${algId}）：${message}` : fallback;
     },
     formatFailedIds(ids) {

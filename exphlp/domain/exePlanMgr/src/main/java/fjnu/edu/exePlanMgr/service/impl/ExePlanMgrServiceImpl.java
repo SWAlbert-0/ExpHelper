@@ -85,13 +85,18 @@ public class ExePlanMgrServiceImpl implements ExePlanMgrService {
     }
 
     @Override
-    public List<ExePlanLog> getPlanLogs(String planId, long afterSeq, int limit) {
-        return exePlanMgrDao.getPlanLogs(planId, afterSeq, limit);
+    public List<ExePlanLog> getPlanLogs(String planId, String executionId, long afterSeq, int limit) {
+        return exePlanMgrDao.getPlanLogs(planId, executionId, afterSeq, limit);
     }
 
     @Override
-    public long getLatestPlanLogSeq(String planId) {
-        return exePlanMgrDao.getLatestPlanLogSeq(planId);
+    public long getLatestPlanLogSeq(String planId, String executionId) {
+        return exePlanMgrDao.getLatestPlanLogSeq(planId, executionId);
+    }
+
+    @Override
+    public List<ExePlanLog> listPlanLogs(String planId, String executionId, int limit) {
+        return exePlanMgrDao.listPlanLogs(planId, executionId, limit);
     }
 
 }

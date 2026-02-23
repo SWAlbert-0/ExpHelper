@@ -21,13 +21,19 @@
 - `problem_instances/`：问题实例样例与问题定义
 - `algorithm_service/`：可运行 Java 算法服务（服务名 `nsga2-zdt1-ls`）
 - `scripts/`：辅助脚本
+  - `start-alg-with-nacos.ps1`：一键启动算法服务并等待注册到 Nacos（推荐）
+  - `check-nacos-readiness.ps1`：一键检查 Nacos/算法服务可用性
 - `docs/`：步骤、说明、记录模板
 
 ## 快速启动
 
+先确认 Nacos 端口映射（2.x 必需）：
+- `8848`（HTTP 控制台/API）
+- `9848`（gRPC，服务注册必需）
+- `9849`（集群通信，建议同时映射）
+
 ```powershell
-cd docs/examples/moo-nsga2-zdt1/algorithm_service
-mvn spring-boot:run
+powershell -ExecutionPolicy Bypass -File docs/examples/moo-nsga2-zdt1/scripts/start-alg-with-nacos.ps1
 ```
 
-启动后在 Nacos(`http://localhost:8848`)确认服务 `nsga2-zdt1-ls` 已注册，再按步骤文档进行网页操作。
+若脚本返回成功，即表示服务 `nsga2-zdt1-ls` 已注册到 Nacos，可直接在网页继续操作。

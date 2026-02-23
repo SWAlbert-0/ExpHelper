@@ -115,7 +115,8 @@ public class ExePlanMgrDao {
                 .set("exeStartTime", exeplan.getExeStartTime())
                 .set("exeEndTime", exeplan.getExeEndTime())
                 .set("exeState", exeplan.getExeState())
-                .set("lastError", exeplan.getLastError());
+                .set("lastError", exeplan.getLastError())
+                .set("executionId", exeplan.getExecutionId());
         mongoTemplate.updateFirst(query, update, ExePlan.class, "exePlanMgr");
         return true;
     }
@@ -189,28 +190,51 @@ public class ExePlanMgrDao {
         mongoTemplate.insert(exePlanLog, "exePlanLog");
     }
 
-    public List<ExePlanLog> getPlanLogs(String planId, long afterSeq, int limit) {
+    public List<ExePlanLog> getPlanLogs(String planId, String executionId, long afterSeq, int limit) {
         if (!StringUtils.hasText(planId)) {
             return java.util.Collections.emptyList();
         }
         if (limit <= 0) {
             limit = 200;
         }
-        Query query = new Query(Criteria.where("planId").is(planId).and("seq").gt(afterSeq))
+        Criteria criteria = Criteria.where("planId").is(planId).and("seq").gt(afterSeq);
+        if (StringUtils.hasText(executionId)) {
+            criteria = criteria.and("executionId").is(executionId);
+        }
+        Query query = new Query(criteria)
                 .with(Sort.by(Sort.Order.asc("seq")))
                 .limit(limit);
         return mongoTemplate.find(query, ExePlanLog.class, "exePlanLog");
     }
 
-    public long getLatestPlanLogSeq(String planId) {
+    public long getLatestPlanLogSeq(String planId, String executionId) {
         if (!StringUtils.hasText(planId)) {
             return 0L;
         }
-        Query latestQuery = new Query(Criteria.where("planId").is(planId))
+        Criteria criteria = Criteria.where("planId").is(planId);
+        if (StringUtils.hasText(executionId)) {
+            criteria = criteria.and("executionId").is(executionId);
+        }
+        Query latestQuery = new Query(criteria)
                 .with(Sort.by(Sort.Order.desc("seq")))
                 .limit(1);
         ExePlanLog latest = mongoTemplate.findOne(latestQuery, ExePlanLog.class, "exePlanLog");
         return latest == null ? 0L : latest.getSeq();
+    }
+
+    public List<ExePlanLog> listPlanLogs(String planId, String executionId, int limit) {
+        if (!StringUtils.hasText(planId)) {
+            return Collections.emptyList();
+        }
+        int safeLimit = limit <= 0 ? 5000 : Math.min(limit, 20000);
+        Criteria criteria = Criteria.where("planId").is(planId);
+        if (StringUtils.hasText(executionId)) {
+            criteria = criteria.and("executionId").is(executionId);
+        }
+        Query query = new Query(criteria)
+                .with(Sort.by(Sort.Order.asc("seq")))
+                .limit(safeLimit);
+        return mongoTemplate.find(query, ExePlanLog.class, "exePlanLog");
     }
 
     private Criteria buildIdCriteria(String planId) {

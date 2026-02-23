@@ -30,6 +30,7 @@ public class ExePlan {
     private int exeState;//执行状态（包括以下几种：未执行，执行中，异常结束，正常结束)
     private String description;//计划的描述
     private String lastError;//最近一次执行错误信息
+    private String executionId;//当前/最近一次执行批次ID
 
 
 }//end ExePlan

@@ -5,6 +5,7 @@ import fjnu.edu.alglibmgr.entity.AlgInfo;
 import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
 import com.mongodb.client.result.DeleteResult;
 
+import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -14,7 +15,6 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -113,30 +113,42 @@ public class AlgLibMgrDao {
 
     //通过Id删除算法
     public AlgDeleteResult deleteAlgInfoById(String algId){
+        String normalizedId = algId == null ? "" : algId.trim();
         AlgDeleteResult deleteResult = new AlgDeleteResult();
-        if (!StringUtils.hasText(algId)) {
+        if (!StringUtils.hasText(normalizedId)) {
             deleteResult.setDeletedCount(0L);
             deleteResult.setRepaired(false);
             deleteResult.setNoop(true);
+            deleteResult.setVerified(true);
             return deleteResult;
         }
-        Query primaryQuery = new Query(buildIdCriteria(algId));
-        DeleteResult primaryResult = mongoTemplate.remove(primaryQuery, "algLibMgr");
-        long primaryDeleted = primaryResult == null ? 0L : primaryResult.getDeletedCount();
-        if (primaryDeleted > 0) {
-            deleteResult.setDeletedCount(primaryDeleted);
-            deleteResult.setRepaired(false);
-            deleteResult.setNoop(false);
-            return deleteResult;
+        long deletedCount = 0L;
+        boolean repaired = false;
+
+        // 1) 优先按字符串 _id 删除（兼容历史 string _id）
+        deletedCount += deleteByRawField("_id", normalizedId);
+        if (deletedCount <= 0 && ObjectId.isValid(normalizedId)) {
+            // 2) 再按 ObjectId _id 删除
+            deletedCount += deleteByRawField("_id", new ObjectId(normalizedId));
+        }
+        if (deletedCount <= 0) {
+            // 3) 使用映射层 Query 删除，兼容底层驱动匹配差异
+            deletedCount += deleteByQuery(buildIdCriteria(normalizedId));
+        }
+        if (deletedCount <= 0) {
+            // 4) 兼容历史脏数据：曾有文档将业务id保存在 algId 字段而非 _id
+            long legacyDeleted = deleteByRawField("algId", normalizedId);
+            if (legacyDeleted <= 0) {
+                legacyDeleted = deleteByQuery(Criteria.where("algId").is(normalizedId));
+            }
+            deletedCount += legacyDeleted;
+            repaired = legacyDeleted > 0;
         }
 
-        // 兼容历史脏数据：曾有文档将业务id保存在 algId 字段而非 _id
-        Query legacyQuery = new Query(Criteria.where("algId").is(algId));
-        DeleteResult legacyResult = mongoTemplate.remove(legacyQuery, "algLibMgr");
-        long legacyDeleted = legacyResult == null ? 0L : legacyResult.getDeletedCount();
-        deleteResult.setDeletedCount(legacyDeleted);
-        deleteResult.setRepaired(legacyDeleted > 0);
-        deleteResult.setNoop(legacyDeleted <= 0);
+        deleteResult.setDeletedCount(deletedCount);
+        deleteResult.setRepaired(repaired);
+        deleteResult.setNoop(deletedCount <= 0);
+        deleteResult.setVerified(!existsByAnyKnownId(normalizedId));
         return deleteResult;
     }
 
@@ -187,6 +199,48 @@ public class AlgLibMgrDao {
             );
         }
         return stringIdCriteria;
+    }
+
+    private long deleteByRawField(String field, Object value) {
+        if (!StringUtils.hasText(field) || value == null) {
+            return 0L;
+        }
+        DeleteResult deleteResult = mongoTemplate.getCollection("algLibMgr")
+                .deleteMany(new Document(field, value));
+        return deleteResult == null ? 0L : deleteResult.getDeletedCount();
+    }
+
+    private long deleteByQuery(Criteria criteria) {
+        if (criteria == null) {
+            return 0L;
+        }
+        DeleteResult deleteResult = mongoTemplate.remove(new Query(criteria), AlgInfo.class, "algLibMgr");
+        return deleteResult == null ? 0L : deleteResult.getDeletedCount();
+    }
+
+    private boolean existsByAnyKnownId(String id) {
+        if (!StringUtils.hasText(id)) {
+            return false;
+        }
+        if (mongoTemplate.exists(new Query(buildIdCriteria(id)), AlgInfo.class, "algLibMgr")) {
+            return true;
+        }
+        if (existsByRawField("_id", id)) {
+            return true;
+        }
+        if (ObjectId.isValid(id) && existsByRawField("_id", new ObjectId(id))) {
+            return true;
+        }
+        return existsByRawField("algId", id);
+    }
+
+    private boolean existsByRawField(String field, Object value) {
+        if (!StringUtils.hasText(field) || value == null) {
+            return false;
+        }
+        long count = mongoTemplate.getCollection("algLibMgr")
+                .countDocuments(new Document(field, value));
+        return count > 0;
     }
 
 }

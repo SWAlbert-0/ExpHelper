@@ -2,10 +2,17 @@ package fjnu.edu.controller;
 
 import fjnu.edu.exePlanMgr.entity.ExePlan;
 import fjnu.edu.exePlanMgr.entity.ExePlanLog;
+import fjnu.edu.exePlanMgr.entity.PlanPreCheckResult;
+import fjnu.edu.alglibmgr.entity.AlgInfo;
+import fjnu.edu.alglibmgr.service.AlgLibMgrService;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import fjnu.edu.intf.PlanExecuteService;
+import fjnu.edu.probInstMgr.entity.ProbInst;
+import fjnu.edu.probInstMgr.service.ProbInstMgrService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -21,14 +28,23 @@ class ExePlanMgrCtrlTest {
     private ExePlanMgrCtrl controller;
     private ExePlanMgrService exePlanMgrService;
     private PlanExecuteService planExecuteService;
+    private ProbInstMgrService probInstMgrService;
+    private AlgLibMgrService algLibMgrService;
+    private DiscoveryClient discoveryClient;
 
     @BeforeEach
     void setUp() {
         controller = new ExePlanMgrCtrl();
         exePlanMgrService = mock(ExePlanMgrService.class);
         planExecuteService = mock(PlanExecuteService.class);
+        probInstMgrService = mock(ProbInstMgrService.class);
+        algLibMgrService = mock(AlgLibMgrService.class);
+        discoveryClient = mock(DiscoveryClient.class);
         ReflectionTestUtils.setField(controller, "exePlanMgrService", exePlanMgrService);
         ReflectionTestUtils.setField(controller, "planExecuteService", planExecuteService);
+        ReflectionTestUtils.setField(controller, "probInstMgrService", probInstMgrService);
+        ReflectionTestUtils.setField(controller, "algLibMgrService", algLibMgrService);
+        ReflectionTestUtils.setField(controller, "discoveryClient", discoveryClient);
     }
 
     @Test
@@ -87,17 +103,74 @@ class ExePlanMgrCtrlTest {
         ExePlan plan = new ExePlan();
         plan.setExeState(2);
         plan.setLastError(null);
+        plan.setExecutionId("exec-1");
         ExePlanLog log = new ExePlanLog();
         log.setSeq(3L);
         log.setMessage("计划开始执行");
-        when(exePlanMgrService.getPlanLogs("p-log-1", 0L, 200)).thenReturn(Collections.singletonList(log));
+        when(exePlanMgrService.getPlanLogs("p-log-1", "exec-1", 0L, 200)).thenReturn(Collections.singletonList(log));
         when(exePlanMgrService.getExePlanById("p-log-1")).thenReturn(plan);
 
-        Map<String, Object> response = controller.getPlanLogs("p-log-1", 0L, 200, new MockHttpServletRequest());
+        Map<String, Object> response = controller.getPlanLogs("p-log-1", 0L, 200, null, "latest", new MockHttpServletRequest());
 
         assertEquals(200, response.get("code"));
         Map<String, Object> data = (Map<String, Object>) response.get("data");
         assertEquals(3L, data.get("nextSeq"));
         assertEquals(2, data.get("planState"));
+        assertEquals("exec-1", data.get("executionId"));
+    }
+
+    @Test
+    void preCheckReturns400WhenPlanIdEmpty() {
+        Map<String, Object> response = controller.preCheck(" ", new MockHttpServletRequest());
+        assertEquals(400, response.get("code"));
+        assertEquals("PLAN_ID_EMPTY", response.get("errorCode"));
+    }
+
+    @Test
+    void preCheckReturns200WhenPassed() {
+        PlanPreCheckResult result = PlanPreCheckResult.passed(Collections.emptyList());
+        when(planExecuteService.preCheck("p-ok")).thenReturn(result);
+
+        Map<String, Object> response = controller.preCheck("p-ok", new MockHttpServletRequest());
+
+        assertEquals(200, response.get("code"));
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        assertEquals(true, data.get("pass"));
+        assertEquals("执行前检查通过", response.get("msg"));
+    }
+
+    @Test
+    void preCheckReturns400WhenFailed() {
+        PlanPreCheckResult result = PlanPreCheckResult.failed("ALG_SERVICE_NO_INSTANCE",
+                "执行前检查失败: 服务[nsga2-zdt1-ls]在Nacos中无可用实例", Collections.emptyList());
+        when(planExecuteService.preCheck("p-fail")).thenReturn(result);
+
+        Map<String, Object> response = controller.preCheck("p-fail", new MockHttpServletRequest());
+
+        assertEquals(400, response.get("code"));
+        assertEquals("ALG_SERVICE_NO_INSTANCE", response.get("errorCode"));
+    }
+
+    @Test
+    void wizardPrecheckReturns400WhenProblemMissing() {
+        when(probInstMgrService.getProbInstByID("prob-1")).thenReturn(null);
+        Map<String, Object> response = controller.wizardPrecheck(null, "prob-1", "alg-1", "svc", new MockHttpServletRequest());
+        assertEquals(400, response.get("code"));
+    }
+
+    @Test
+    void wizardPrecheckReturns200WhenReachable() {
+        ProbInst probInst = new ProbInst();
+        probInst.setInstId("prob-1");
+        AlgInfo algInfo = new AlgInfo();
+        algInfo.setAlgId("alg-1");
+        algInfo.setAlgName("testAlg");
+        algInfo.setServiceName("svc-1");
+        when(probInstMgrService.getProbInstByID("prob-1")).thenReturn(probInst);
+        when(algLibMgrService.getAlgInfoById("alg-1")).thenReturn(algInfo);
+        when(discoveryClient.getInstances("svc-1")).thenReturn(Collections.singletonList(mock(ServiceInstance.class)));
+
+        Map<String, Object> response = controller.wizardPrecheck(null, "prob-1", "alg-1", "svc-1", new MockHttpServletRequest());
+        assertEquals(200, response.get("code"));
     }
 }

@@ -37,8 +37,10 @@ public interface ExePlanMgrService {
 
     public void appendPlanLog(ExePlanLog exePlanLog);
 
-    public List<ExePlanLog> getPlanLogs(String planId, long afterSeq, int limit);
+    public List<ExePlanLog> getPlanLogs(String planId, String executionId, long afterSeq, int limit);
 
-    public long getLatestPlanLogSeq(String planId);
+    public long getLatestPlanLogSeq(String planId, String executionId);
+
+    public List<ExePlanLog> listPlanLogs(String planId, String executionId, int limit);
 
 }

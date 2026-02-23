@@ -85,3 +85,13 @@ export function countAlgInfosByAlgName(algName) {
     }
   });
 }
+
+export function generateDeployTemplate(algId) {
+  return request({
+    url: "/api/AlgController/generateDeployTemplate",
+    method: "post",
+    params: {
+      algId: algId
+    }
+  });
+}

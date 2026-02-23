@@ -15,8 +15,9 @@ public class ExePlanLog {
     private String level;
     private String stage;
     private String message;
+    private String executionId;
     private String algId;
     private Integer runIndex;
     private String probInstId;
+    private String details;
 }
-

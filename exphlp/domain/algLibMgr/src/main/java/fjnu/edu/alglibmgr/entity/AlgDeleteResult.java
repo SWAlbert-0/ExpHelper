@@ -7,4 +7,5 @@ public class AlgDeleteResult {
     private long deletedCount;
     private boolean repaired;
     private boolean noop;
+    private boolean verified;
 }

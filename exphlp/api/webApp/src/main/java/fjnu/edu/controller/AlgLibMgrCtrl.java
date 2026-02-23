@@ -49,7 +49,7 @@ public class AlgLibMgrCtrl {
         }
         long refPlanCount = exePlanMgrService.countPlansByAlgId(algId);
         if (refPlanCount > 0) {
-            Map<String, Object> data = buildDeleteData(algId, 0L, false, false, true, refPlanCount,
+            Map<String, Object> data = buildDeleteData(algId, 0L, false, false, true, true, refPlanCount,
                     exePlanMgrService.listPlanNamesByAlgId(algId, 5));
             return ApiResponse.failed(request, 409, "删除失败，算法已被执行计划引用，请先解除关联", ErrorCode.ALG_IN_USE.code(), data);
         }
@@ -57,7 +57,11 @@ public class AlgLibMgrCtrl {
         long deletedCount = deleteResult == null ? 0L : deleteResult.getDeletedCount();
         boolean repaired = deleteResult != null && deleteResult.isRepaired();
         boolean noop = deleteResult == null || deleteResult.isNoop();
-        Map<String, Object> data = buildDeleteData(algId, deletedCount, deletedCount > 0, repaired, noop, 0L, Collections.emptyList());
+        boolean verified = deleteResult == null || deleteResult.isVerified();
+        Map<String, Object> data = buildDeleteData(algId, deletedCount, deletedCount > 0, repaired, noop, verified, 0L, Collections.emptyList());
+        if (noop && !verified) {
+            return ApiResponse.failed(request, 500, "删除未生效，请刷新后重试", ErrorCode.INTERNAL_ERROR.code(), data);
+        }
         return ApiResponse.ok(request, data, "删除成功");
     }
 
@@ -120,6 +124,31 @@ public class AlgLibMgrCtrl {
         return count;
     }
 
+    @PostMapping("/generateDeployTemplate")
+    public Map<String, Object> generateDeployTemplate(@RequestParam(value = "algId") String algId,
+                                                       HttpServletRequest request) {
+        if (!StringUtils.hasText(algId)) {
+            return ApiResponse.failed(request, 400, "算法ID不能为空", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        AlgInfo algInfo = algLibMgrService.getAlgInfoById(algId);
+        if (algInfo == null) {
+            return ApiResponse.failed(request, 404, "算法不存在", ErrorCode.ALG_NOT_FOUND.code());
+        }
+        String serviceName = StringUtils.hasText(algInfo.getServiceName()) ? algInfo.getServiceName().trim() : "replace-service-name";
+        String imageName = "replace-your-algorithm-image";
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("algId", algInfo.getAlgId());
+        data.put("algName", algInfo.getAlgName());
+        data.put("serviceName", serviceName);
+        data.put("composeYaml", buildComposeYaml(imageName, serviceName));
+        data.put("envTemplate", "NACOS_SERVER_ADDR=host.docker.internal:8848\nNACOS_NAMESPACE=public\nNACOS_GROUP=DEFAULT_GROUP");
+        data.put("runCommand", "docker compose -f docker-compose.algorithm.yml --env-file .env.algorithm up -d");
+        data.put("verifyCommand", "curl http://localhost:8848/nacos/v1/ns/instance/list?serviceName=" + serviceName + "&groupName=DEFAULT_GROUP&namespaceId=public");
+        data.put("notes", "请确保算法服务内部监听端口与 compose ports 一致，并已在应用配置中启用 Nacos discovery");
+        return ApiResponse.ok(request, data, "部署模板生成成功");
+    }
+
     private int normalizePageNum(int pageNum) {
         return pageNum <= 0 ? 1 : pageNum;
     }
@@ -129,17 +158,33 @@ public class AlgLibMgrCtrl {
     }
 
     private Map<String, Object> buildDeleteData(String algId, long deletedCount, boolean existed, boolean repaired,
-                                                boolean noop, long refPlanCount, List<String> refPlanNames) {
+                                                boolean noop, boolean verified, long refPlanCount, List<String> refPlanNames) {
         Map<String, Object> data = new HashMap<>();
         data.put("algId", algId);
         data.put("deletedCount", deletedCount);
         data.put("existed", existed);
         data.put("repaired", repaired);
         data.put("noop", noop);
+        data.put("verified", verified);
         data.put("blocked", refPlanCount > 0);
         data.put("refPlanCount", refPlanCount);
         data.put("refPlanNames", refPlanNames == null ? Collections.emptyList() : refPlanNames);
         return data;
+    }
+
+    private String buildComposeYaml(String imageName, String serviceName) {
+        return "services:\n" +
+                "  " + serviceName + ":\n" +
+                "    image: " + imageName + "\n" +
+                "    container_name: " + serviceName + "\n" +
+                "    environment:\n" +
+                "      - NACOS_SERVER_ADDR=${NACOS_SERVER_ADDR}\n" +
+                "      - NACOS_NAMESPACE=${NACOS_NAMESPACE:-public}\n" +
+                "      - NACOS_GROUP=${NACOS_GROUP:-DEFAULT_GROUP}\n" +
+                "      - SPRING_APPLICATION_NAME=" + serviceName + "\n" +
+                "    ports:\n" +
+                "      - \"18082:18082\"\n" +
+                "    restart: unless-stopped\n";
     }
 
 }

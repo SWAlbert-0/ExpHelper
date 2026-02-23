@@ -1,23 +1,18 @@
 <template>
   <div class="app-container">
-    <!-- 添加 批量删除 查询-->
-    <el-row>
-      <el-col :span="2">
+    <div class="toolbar">
+      <div class="toolbar-left">
         <el-button type="success" icon="el-icon-plus" @click="addForm()">添加</el-button>
-      </el-col>
-      <el-col :span="2">
         <el-button type="danger" icon="el-icon-delete" @click="deleteBatch()">批量删除</el-button>
-      </el-col>
-      <el-col :span="20">
-        <el-form :inline="true" class="demo-form-inline" align="center">
-          <el-form-item>
-            <el-input v-model="userName" placeholder="请输入姓名" clearable />
-          </el-form-item>
-          <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getUserByRegexName()">查询</el-button>
-          <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
-        </el-form>
-      </el-col>
-    </el-row>
+      </div>
+      <el-form :inline="true" class="toolbar-right">
+        <el-form-item>
+          <el-input v-model="userName" placeholder="请输入姓名" clearable />
+        </el-form-item>
+        <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getUserByRegexName()">查询</el-button>
+        <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
+      </el-form>
+    </div>
     <!-- 表格 -->
     <el-table
       :data="tableData"
@@ -29,16 +24,18 @@
     >
       <!-- 多选框 -->
       <el-table-column type="selection" width="60" align="center"></el-table-column>
-      <el-table-column prop="userName" label="姓名" width="210" align="center"></el-table-column>
-      <el-table-column prop="email" label="email" width="150" align="center"></el-table-column>
-      <el-table-column prop="wechat" label="wechat" width="180" align="center"></el-table-column>
-      <el-table-column prop="mobile" label="手机号" width="160" align="center"></el-table-column>
-      <el-table-column prop="qq" label="QQ号" width="140" align="center"></el-table-column>
-      <el-table-column label="操作" align="center" width="250">
+      <el-table-column prop="userName" label="姓名" min-width="140" align="center"></el-table-column>
+      <el-table-column prop="email" label="email" min-width="220" align="center"></el-table-column>
+      <el-table-column prop="wechat" label="wechat" min-width="180" align="center"></el-table-column>
+      <el-table-column prop="mobile" label="手机号" min-width="140" align="center"></el-table-column>
+      <el-table-column prop="qq" label="QQ号" min-width="120" align="center"></el-table-column>
+      <el-table-column label="操作" align="center" width="300">
         <template slot-scope="scope">
-          <el-button type="primary" size="mini" icon="el-icon-edit" @click="updateForm(scope.row)">编辑</el-button>
-          <el-button type="warning" size="mini" icon="el-icon-key" @click="resetPassword(scope.row)">重置密码</el-button>
-          <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteForm(scope.row.userId)">删除</el-button>
+          <div class="op-buttons">
+            <el-button type="primary" size="mini" icon="el-icon-edit" @click="updateForm(scope.row)">编辑</el-button>
+            <el-button type="warning" size="mini" icon="el-icon-key" @click="resetPassword(scope.row)">重置密码</el-button>
+            <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteForm(scope.row.userId)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -349,4 +346,52 @@ export default {
 </script>
 
 <style lang="less" scoped>
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-right {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-left: auto;
+}
+
+.toolbar-right /deep/ .el-form-item {
+  margin-bottom: 0;
+}
+
+.toolbar-right /deep/ .el-input {
+  width: 270px;
+}
+
+.op-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
 </style>
