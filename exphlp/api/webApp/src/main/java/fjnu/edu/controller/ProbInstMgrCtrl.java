@@ -41,7 +41,7 @@ public class ProbInstMgrCtrl {
         }
         long refPlanCount = exePlanMgrService.countPlansByProbInstId(proId);
         if (refPlanCount > 0) {
-            Map<String, Object> data = buildDeleteData(proId, 0L, false, false, true, refPlanCount,
+            Map<String, Object> data = buildDeleteData(proId, 0L, false, false, true, true, refPlanCount,
                     exePlanMgrService.listPlanNamesByProbInstId(proId, 5));
             return ApiResponse.failed(request, 409, "删除失败，问题实例已被执行计划引用，请先解除关联", ErrorCode.PROB_IN_USE.code(), data);
         }
@@ -49,7 +49,11 @@ public class ProbInstMgrCtrl {
         long deletedCount = deleteResult == null ? 0L : deleteResult.getDeletedCount();
         boolean repaired = deleteResult != null && deleteResult.isRepaired();
         boolean noop = deleteResult == null || deleteResult.isNoop();
-        Map<String, Object> data = buildDeleteData(proId, deletedCount, deletedCount > 0, repaired, noop, 0L, Collections.emptyList());
+        boolean verified = deleteResult == null || deleteResult.isVerified();
+        Map<String, Object> data = buildDeleteData(proId, deletedCount, deletedCount > 0, repaired, noop, verified, 0L, Collections.emptyList());
+        if (noop && !verified) {
+            return ApiResponse.failed(request, 500, "删除未生效，请刷新后重试", ErrorCode.INTERNAL_ERROR.code(), data);
+        }
         return ApiResponse.ok(request, data, "删除成功");
     }
 
@@ -112,13 +116,14 @@ public class ProbInstMgrCtrl {
     }
 
     private Map<String, Object> buildDeleteData(String proId, long deletedCount, boolean existed, boolean repaired,
-                                                boolean noop, long refPlanCount, List<String> refPlanNames) {
+                                                boolean noop, boolean verified, long refPlanCount, List<String> refPlanNames) {
         Map<String, Object> data = new HashMap<>();
         data.put("proId", proId);
         data.put("deletedCount", deletedCount);
         data.put("existed", existed);
         data.put("repaired", repaired);
         data.put("noop", noop);
+        data.put("verified", verified);
         data.put("blocked", refPlanCount > 0);
         data.put("refPlanCount", refPlanCount);
         data.put("refPlanNames", refPlanNames == null ? Collections.emptyList() : refPlanNames);

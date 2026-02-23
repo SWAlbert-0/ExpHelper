@@ -4,6 +4,7 @@ import fjnu.edu.auth.ApiResponse;
 import fjnu.edu.auth.ErrorCode;
 import fjnu.edu.auth.TraceContext;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
+import fjnu.edu.exePlanMgr.entity.ExePlanLog;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import fjnu.edu.intf.PlanExecuteService;
 import org.slf4j.Logger;
@@ -107,6 +108,34 @@ public class ExePlanMgrCtrl {
         if (!accepted) {
             return ApiResponse.ok(request, data, "计划未被受理，可能正在执行或执行队列已满");
         }
+        return ApiResponse.ok(request, data);
+    }
+
+    @GetMapping("/getPlanLogs")
+    public Map<String, Object> getPlanLogs(@RequestParam String planId,
+                                           @RequestParam(required = false, defaultValue = "0") long afterSeq,
+                                           @RequestParam(required = false, defaultValue = "200") int limit,
+                                           HttpServletRequest request) {
+        if (!StringUtils.hasText(planId)) {
+            return ApiResponse.failed(request, 400, "planId不能为空", ErrorCode.PLAN_ID_EMPTY.code());
+        }
+        if (limit <= 0 || limit > 1000) {
+            limit = 200;
+        }
+        List<ExePlanLog> items = exePlanMgrService.getPlanLogs(planId, Math.max(afterSeq, 0L), limit);
+        long nextSeq = afterSeq;
+        if (items != null && !items.isEmpty()) {
+            nextSeq = items.get(items.size() - 1).getSeq();
+        } else {
+            nextSeq = Math.max(nextSeq, exePlanMgrService.getLatestPlanLogSeq(planId));
+        }
+        ExePlan latestPlan = exePlanMgrService.getExePlanById(planId);
+        Map<String, Object> data = new HashMap<>();
+        data.put("planId", planId);
+        data.put("items", items == null ? Collections.emptyList() : items);
+        data.put("nextSeq", nextSeq);
+        data.put("planState", latestPlan == null ? null : latestPlan.getExeState());
+        data.put("lastError", latestPlan == null ? null : latestPlan.getLastError());
         return ApiResponse.ok(request, data);
     }
 

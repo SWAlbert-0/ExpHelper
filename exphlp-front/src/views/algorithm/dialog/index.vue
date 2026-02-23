@@ -127,6 +127,10 @@ export default {
           label: "int"
         },
         {
+          value: "long",
+          label: "long"
+        },
+        {
           value: "string",
           label: "string"
         },

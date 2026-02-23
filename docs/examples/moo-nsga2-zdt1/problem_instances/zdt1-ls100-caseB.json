@@ -1,0 +1,8 @@
+{
+  "categoryName": "moo-zdt1",
+  "instName": "zdt1-ls100-caseB",
+  "machineIp": "127.0.0.1",
+  "dirName": "examples/zdt1/ls100/caseB",
+  "machineName": "local",
+  "description": "ZDT1 large-scale stress case; nVars=100; bounds=[0,1]; seed=20260223"
+}

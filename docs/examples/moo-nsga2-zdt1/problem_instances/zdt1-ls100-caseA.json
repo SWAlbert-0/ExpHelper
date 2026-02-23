@@ -1,0 +1,8 @@
+{
+  "categoryName": "moo-zdt1",
+  "instName": "zdt1-ls100-caseA",
+  "machineIp": "127.0.0.1",
+  "dirName": "examples/zdt1/ls100/caseA",
+  "machineName": "local",
+  "description": "ZDT1 large-scale baseline; nVars=100; bounds=[0,1]"
+}

@@ -36,6 +36,7 @@ class ProbInstMgrCtrlTest {
         result.setDeletedCount(1L);
         result.setRepaired(false);
         result.setNoop(false);
+        result.setVerified(true);
         when(exePlanMgrService.countPlansByProbInstId("prob-1")).thenReturn(0L);
         when(probInstMgrService.delProbInstByID("prob-1")).thenReturn(result);
 
@@ -54,6 +55,7 @@ class ProbInstMgrCtrlTest {
         result.setDeletedCount(0L);
         result.setRepaired(false);
         result.setNoop(true);
+        result.setVerified(true);
         when(exePlanMgrService.countPlansByProbInstId("prob-missing")).thenReturn(0L);
         when(probInstMgrService.delProbInstByID("prob-missing")).thenReturn(result);
 
@@ -63,6 +65,22 @@ class ProbInstMgrCtrlTest {
         Map<String, Object> data = (Map<String, Object>) response.get("data");
         assertEquals(0L, data.get("deletedCount"));
         assertEquals(true, data.get("noop"));
+    }
+
+    @Test
+    void deleteProblemByIdReturns500WhenNoopButNotVerified() {
+        ProbDeleteResult result = new ProbDeleteResult();
+        result.setDeletedCount(0L);
+        result.setRepaired(false);
+        result.setNoop(true);
+        result.setVerified(false);
+        when(exePlanMgrService.countPlansByProbInstId("prob-bad")).thenReturn(0L);
+        when(probInstMgrService.delProbInstByID("prob-bad")).thenReturn(result);
+
+        Map<String, Object> response = controller.delProbInstByID("prob-bad", new MockHttpServletRequest());
+
+        assertEquals(500, response.get("code"));
+        assertEquals("INTERNAL_ERROR", response.get("errorCode"));
     }
 
     @Test

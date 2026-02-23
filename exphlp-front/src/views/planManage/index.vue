@@ -253,11 +253,11 @@
               </div>
             </el-col>
             <el-col :span="12">
-              <div class="grid-content bg-purple-light">
+              <div class="grid-content action-group-right">
                 <el-button type="primary" icon="el-icon-search"
                            @click="pageHelper.currentPageNum = 1, searchByCondition()">查询
                 </el-button>
-                <el-button type="default" icon="el-icon-refresh" @click="clearSearchCondition()">返回</el-button>
+                <el-button type="default" icon="el-icon-refresh" @click="clearSearchCondition()">刷新</el-button>
               </div>
             </el-col>
           </el-row>
@@ -276,10 +276,14 @@
             <el-table-column prop="exeStartTime" label="开始时间" width="170" align="center"></el-table-column>
             <el-table-column prop="exeEndTime" label="结束时间" width="170" align="center"></el-table-column>
             <el-table-column prop="exeState" label="执行状态" width="100" align="center"></el-table-column>
-            <el-table-column label="操作" align="center" width="330">
+            <el-table-column prop="lastError" label="异常原因" width="220" align="center" show-overflow-tooltip></el-table-column>
+            <el-table-column label="操作" align="center" width="430">
               <template slot-scope="scope">
                 <el-button type="success" size="mini" icon="el-icon-check" @click="doExePlan(scope.row)"
                            :disabled="scope.row.exeState != '未执行'">执行
+                </el-button>
+                <el-button type="warning" size="mini" icon="el-icon-refresh" @click="reExecutePlan(scope.row)"
+                           :disabled="scope.row.exeState != '异常结束'">重新执行
                 </el-button>
                 <el-button type="primary" size="mini" icon="el-icon-view" @click="viewExePlan(scope.row)">查看
                 </el-button>
@@ -333,11 +337,15 @@
               <el-form-item label="结束时间">
                 <el-input v-model="showedExePlan.exeEndTime" readonly></el-input>
               </el-form-item>
+              <el-form-item label="异常原因" v-if="showedExePlan.lastError">
+                <el-input type="textarea" v-model="showedExePlan.lastError" readonly></el-input>
+              </el-form-item>
               <el-form-item label="计划描述">
                 <el-input type="textarea" v-model="showedExePlan.description" readonly></el-input>
               </el-form-item>
             </el-form>
-            <el-button type="primary" @click="viewVisible = false, showExePlanTableVisible =true">返 回</el-button>
+            <el-button type="warning" @click="openPlanLogsDialog">执行日志</el-button>
+            <el-button type="primary" @click="backFromView">返 回</el-button>
           </div>
         </el-aside>
         <el-main>
@@ -408,6 +416,29 @@
               <el-table-column property="eachResults" label="结果" align="center"></el-table-column>
             </el-table>
           </el-dialog>
+          <el-dialog
+            title="执行日志"
+            :visible.sync="dialogPlanLogsVisible"
+            center
+            width="70%"
+            :before-close="closePlanLogsDialog"
+            :close-on-click-modal="false"
+          >
+            <el-table :data="planLogs" border fit height="420">
+              <el-table-column property="seq" label="序号" width="90" align="center"></el-table-column>
+              <el-table-column property="ts" label="时间" width="180" align="center">
+                <template slot-scope="scope">
+                  {{ formatTimestampToDateTime(scope.row.ts) }}
+                </template>
+              </el-table-column>
+              <el-table-column property="level" label="级别" width="90" align="center"></el-table-column>
+              <el-table-column property="stage" label="阶段" width="120" align="center"></el-table-column>
+              <el-table-column property="message" label="内容" min-width="320"></el-table-column>
+            </el-table>
+            <div style="margin-top: 12px; text-align: right;">
+              <span>计划状态：{{ showedExePlan.exeState }}</span>
+            </div>
+          </el-dialog>
         </el-main>
       </el-container>
     </div>
@@ -424,6 +455,7 @@ import {getUserList} from "@/api/exphlp/platMgr";
 import {
   addExePlan, countAllExePlans,
   deleteExePlanById, execute,
+  getPlanLogs,
   getExePlanByName,
   getExePlans,
   updateExePlanById
@@ -500,6 +532,10 @@ export default {
       multipleSelection1: [],
       dialogViewRunParasVisible: false,
       dialogViewExeResultsVisible: false,
+      dialogPlanLogsVisible: false,
+      planLogs: [],
+      planLogAfterSeq: 0,
+      planLogTimer: null,
       showedExePlan: {
         planName: '',
         probInsts: [],
@@ -533,6 +569,9 @@ export default {
     this.getUserInfos();
     this.getExePlans();
     this.countAllExePlans();
+  },
+  beforeDestroy() {
+    this.stopPlanLogPolling();
   },
   methods: {
     listProbInsts() {
@@ -660,7 +699,7 @@ export default {
       var flag = true;
       if (this.addFlag) {
         getExePlanByName(this.exePlan.planName).then(res => {
-          if (res != '') {
+          if (res && res.planId) {
             this.$message({type: "warning", message: "计划名称已存在",});
           } else {
             if (this.exePlan.algRunInfos.length == 0) {
@@ -693,7 +732,9 @@ export default {
               }
             }
           }
-        })
+        }).catch(() => {
+          this.$message({type: "error", message: "计划名称校验失败，请重试",});
+        });
       } else {
         if (this.exePlan.algRunInfos.length == 0) {
           flag = false;
@@ -826,6 +867,10 @@ export default {
       this.multipleSelection1 = val;
     },
     viewExePlan(scope) {
+      this.stopPlanLogPolling();
+      this.dialogPlanLogsVisible = false;
+      this.planLogs = [];
+      this.planLogAfterSeq = 0;
       this.exeResultsTable = [];
       this.exePlanId = scope.planId;
       this.showedExePlan = {...scope};
@@ -881,6 +926,72 @@ export default {
       getExeResult(this.exePlanId, scope.algId, scope.showedAlgName).then(res => {
         this.exeResultsTable = res;
       });
+    },
+    openPlanLogsDialog() {
+      this.dialogPlanLogsVisible = true;
+      this.planLogs = [];
+      this.planLogAfterSeq = 0;
+      this.fetchPlanLogs(true);
+      if (this.showedExePlan.exeState === "执行中") {
+        this.startPlanLogPolling();
+      }
+    },
+    closePlanLogsDialog(done) {
+      this.stopPlanLogPolling();
+      this.dialogPlanLogsVisible = false;
+      if (done) {
+        done();
+      }
+    },
+    startPlanLogPolling() {
+      this.stopPlanLogPolling();
+      this.planLogTimer = setInterval(() => {
+        this.fetchPlanLogs(false);
+      }, 2000);
+    },
+    stopPlanLogPolling() {
+      if (this.planLogTimer) {
+        clearInterval(this.planLogTimer);
+        this.planLogTimer = null;
+      }
+    },
+    fetchPlanLogs(reset) {
+      if (!this.exePlanId) {
+        return;
+      }
+      const afterSeq = reset ? 0 : this.planLogAfterSeq;
+      getPlanLogs(this.exePlanId, afterSeq, 200).then(res => {
+        const data = res && res.data ? res.data : {};
+        const items = data.items || [];
+        if (reset) {
+          this.planLogs = items;
+        } else if (items.length > 0) {
+          this.planLogs = this.planLogs.concat(items);
+        }
+        if (typeof data.nextSeq === "number") {
+          this.planLogAfterSeq = data.nextSeq;
+        } else if (items.length > 0) {
+          this.planLogAfterSeq = items[items.length - 1].seq;
+        }
+        if (typeof data.planState === "number") {
+          const stateIndex = data.planState - 1;
+          if (stateIndex >= 0 && stateIndex < this.options.length) {
+            this.showedExePlan.exeState = this.options[stateIndex].value;
+          }
+        }
+        if (data.lastError !== undefined) {
+          this.showedExePlan.lastError = data.lastError || "";
+        }
+        if (this.showedExePlan.exeState !== "执行中") {
+          this.stopPlanLogPolling();
+        }
+      });
+    },
+    backFromView() {
+      this.stopPlanLogPolling();
+      this.dialogPlanLogsVisible = false;
+      this.viewVisible = false;
+      this.showExePlanTableVisible = true;
     },
     editExePlan(scope) {
       this.algId = '';
@@ -1018,14 +1129,42 @@ export default {
       });
     },
     doExePlan(scope) {
+      if (scope.exeState !== '未执行') {
+        return;
+      }
+      this.executePlan(scope, false);
+    },
+    reExecutePlan(scope) {
+      if (scope.exeState !== '异常结束') {
+        return;
+      }
+      this.$confirm("重新执行将覆盖当前计划的同名结果展示，是否继续?", "提示", {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+      }).then(() => {
+        this.executePlan(scope, true);
+      }).catch(() => {
+        this.$message({type: "info", message: "已取消重新执行",});
+      });
+    },
+    executePlan(scope, isRetry) {
       execute(scope.planId).then(res => {
-        if (res && res.data && res.data.accepted) {
+        const data = res && res.data ? res.data : {};
+        if (data.accepted) {
           scope.exeState = '执行中';
-          this.$message({type: "success", message: "计划执行中",});
+          scope.lastError = "";
+          this.$message({type: "success", message: isRetry ? "计划重新执行中" : "计划执行中",});
+          if (this.showedExePlan.planId && this.showedExePlan.planId === scope.planId) {
+            this.showedExePlan.exeState = "执行中";
+            this.showedExePlan.lastError = "";
+          }
         } else {
-          const msg = (res && res.msg) ? res.msg : "计划执行失败";
+          const reason = data.lastError ? ("，原因: " + data.lastError) : "";
+          const msg = ((res && res.msg) ? res.msg : (isRetry ? "计划重新执行失败" : "计划执行失败")) + reason;
           this.$message({type: "warning", message: msg,});
         }
+        this.getExePlans();
       });
     },
     formatTimestampToDateTime(timestamp) {
@@ -1135,6 +1274,12 @@ export default {
 .el-main {
   text-align: center;
   border: solid 1px #eee;
+}
+
+.action-group-right {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 

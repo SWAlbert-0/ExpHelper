@@ -1,0 +1,13 @@
+server:
+  port: 18082
+spring:
+  application:
+    name: nsga2-zdt1-ls
+  cloud:
+    service-registry:
+      auto-registration:
+        fail-fast: false
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        fail-fast: false

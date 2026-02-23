@@ -63,3 +63,15 @@ export function execute(planId) {
     }
   });
 }
+
+export function getPlanLogs(planId, afterSeq, limit) {
+  return request({
+    url: "/api/ExePlanController/getPlanLogs",
+    method: "get",
+    params: {
+      planId: planId,
+      afterSeq: afterSeq,
+      limit: limit
+    }
+  });
+}

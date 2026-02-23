@@ -301,6 +301,8 @@ export default {
               this.$message({type: "success", message: `删除成功（proId=${instId}${repairedText}）`,});
             } else if (state.noop) {
               this.$message({type: "info", message: `记录已不存在（proId=${instId}），列表已同步`,});
+            } else {
+              this.$message({type: "error", message: `删除失败（proId=${instId}）：后端未确认删除`,});
             }
           }).catch((error) => {
             this.$message({type: "error", message: this.extractDeleteErrorMessage(error, instId),});
@@ -469,8 +471,9 @@ export default {
     extractDeleteState(res, proId) {
       const deletedCount = this.extractDeletedCount(res);
       const repaired = !!(res && res.data && res.data.repaired === true);
-      const noop = !!(res && res.data && res.data.noop === true) || deletedCount <= 0;
-      return { proId: proId, deletedCount: deletedCount, repaired: repaired, noop: noop };
+      const verified = !(res && res.data && res.data.verified === false);
+      const noop = !!(res && res.data && res.data.noop === true) && verified;
+      return { proId: proId, deletedCount: deletedCount, repaired: repaired, noop: noop, verified: verified };
     },
     extractBackendErrorCode(error) {
       return error && error.response && error.response.data ? error.response.data.errorCode : "";
@@ -500,6 +503,9 @@ export default {
       }
       const responseMessage = error.response && error.response.data && (error.response.data.msg || error.response.data.message);
       const message = responseMessage || error.message || "";
+      if (message.includes("删除未生效")) {
+        return `删除失败（proId=${proId}）：后端未确认删除，请刷新后重试`;
+      }
       return message ? `删除失败（proId=${proId}）：${message}` : fallback;
     },
     formatFailedIds(ids) {

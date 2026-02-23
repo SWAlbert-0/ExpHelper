@@ -14,7 +14,7 @@
             <el-input v-model="userName" placeholder="请输入姓名" clearable />
           </el-form-item>
           <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getUserByRegexName()">查询</el-button>
-          <el-button type="default" icon="el-icon-refresh" @click="back()">返回</el-button>
+          <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
         </el-form>
       </el-col>
     </el-row>

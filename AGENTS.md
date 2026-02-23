@@ -22,6 +22,22 @@ Use separate terminals for backend and frontend.
 - Backend tests: `cd exphlp && mvn test`
 - Run web API module: `cd exphlp && mvn -pl api/webApp spring-boot:run`
 
+## Version Compatibility Guardrail (Mandatory)
+- For any new Java demo/service/module, align framework versions with this repository baseline before coding:
+  - Java: `17`
+  - Spring Boot: `2.7.18`
+  - Spring Cloud: `2021.0.8`
+  - Spring Cloud Alibaba: `2021.0.5.0`
+- Never introduce older Spring Boot lines (e.g. `2.3.x`) in Java 17 services.
+- If Nacos is used, import Cloud + Alibaba BOMs and avoid hardcoding starter versions that bypass BOM alignment.
+- Before claiming completion, run at least one build command in the target module (e.g. `mvn -q -DskipTests package` or `mvn spring-boot:run`).
+
+### Required Response Content (when handling Java module setup issues)
+- State the root cause explicitly (for example: `Unsupported class file major version 61` means Java 17 bytecode incompatible with old framework versions).
+- State exact version changes made (old -> new).
+- State why those versions are chosen (must reference repository baseline).
+- Provide reproducible verification commands and outcome.
+
 ## Coding Style & Naming Conventions
 - Frontend formatting follows `exphlp-front/.editorconfig`: UTF-8, LF, 2-space indentation.
 - ESLint is configured in `exphlp-front/.eslintrc.js`; run lint before committing.
