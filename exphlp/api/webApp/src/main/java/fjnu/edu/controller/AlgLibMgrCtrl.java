@@ -1,14 +1,21 @@
 package fjnu.edu.controller;
 
+import fjnu.edu.auth.ApiResponse;
+import fjnu.edu.auth.ErrorCode;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
+import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
 import fjnu.edu.alglibmgr.entity.DefPara;
 import fjnu.edu.alglibmgr.service.AlgLibMgrService;
+import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @CrossOrigin
@@ -16,6 +23,9 @@ import java.util.List;
 public class AlgLibMgrCtrl {
     @Autowired
     AlgLibMgrService algLibMgrService;
+
+    @Autowired
+    ExePlanMgrService exePlanMgrService;
 
     @PostMapping("/addAlg")
     public String addAlgInfo (@RequestBody AlgInfo algInfo) {
@@ -33,11 +43,22 @@ public class AlgLibMgrCtrl {
     }
 
     @PostMapping("/deleteAlgById")
-    public void deleteAlgInfoById(@RequestParam(value = "algId") String algId) {
+    public Map<String, Object> deleteAlgInfoById(@RequestParam(value = "algId") String algId, HttpServletRequest request) {
         if (!StringUtils.hasText(algId)) {
             throw new IllegalArgumentException("算法ID不能为空");
         }
-        algLibMgrService.deleteAlgInfoById(algId);
+        long refPlanCount = exePlanMgrService.countPlansByAlgId(algId);
+        if (refPlanCount > 0) {
+            Map<String, Object> data = buildDeleteData(algId, 0L, false, false, true, refPlanCount,
+                    exePlanMgrService.listPlanNamesByAlgId(algId, 5));
+            return ApiResponse.failed(request, 409, "删除失败，算法已被执行计划引用，请先解除关联", ErrorCode.ALG_IN_USE.code(), data);
+        }
+        AlgDeleteResult deleteResult = algLibMgrService.deleteAlgInfoById(algId);
+        long deletedCount = deleteResult == null ? 0L : deleteResult.getDeletedCount();
+        boolean repaired = deleteResult != null && deleteResult.isRepaired();
+        boolean noop = deleteResult == null || deleteResult.isNoop();
+        Map<String, Object> data = buildDeleteData(algId, deletedCount, deletedCount > 0, repaired, noop, 0L, Collections.emptyList());
+        return ApiResponse.ok(request, data, "删除成功");
     }
 
     @GetMapping("/getAlgById")
@@ -105,6 +126,20 @@ public class AlgLibMgrCtrl {
 
     private int normalizePageSize(int pageSize) {
         return pageSize <= 0 ? 10 : pageSize;
+    }
+
+    private Map<String, Object> buildDeleteData(String algId, long deletedCount, boolean existed, boolean repaired,
+                                                boolean noop, long refPlanCount, List<String> refPlanNames) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("algId", algId);
+        data.put("deletedCount", deletedCount);
+        data.put("existed", existed);
+        data.put("repaired", repaired);
+        data.put("noop", noop);
+        data.put("blocked", refPlanCount > 0);
+        data.put("refPlanCount", refPlanCount);
+        data.put("refPlanNames", refPlanNames == null ? Collections.emptyList() : refPlanNames);
+        return data;
     }
 
 }

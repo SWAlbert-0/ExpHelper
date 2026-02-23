@@ -2,6 +2,7 @@ package fjnu.edu.probInstMgr.service.impl;
 
 import fjnu.edu.common.exception.BusinessException;
 import fjnu.edu.probInstMgr.dao.ProbInstDao;
+import fjnu.edu.probInstMgr.entity.ProbDeleteResult;
 import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.probInstMgr.service.ProbInstMgrService;
 
@@ -26,10 +27,9 @@ public class ProbInstMgrServiceImpl implements ProbInstMgrService {
     }
 
     @Override
-    public boolean delProbInstByID(String instId) {
+    public ProbDeleteResult delProbInstByID(String instId) {
         try {
-            probInstDao.delProbInstByID(instId);
-            return true;
+            return probInstDao.delProbInstByID(instId);
         } catch (Exception e) {
             throw new BusinessException("删除问题实例失败");
         }

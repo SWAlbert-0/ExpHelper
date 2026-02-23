@@ -2,6 +2,7 @@ package fjnu.edu.alglibmgr.service;
 
 import fjnu.edu.alglibmgr.entity.DefPara;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
+import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -11,7 +12,7 @@ public interface AlgLibMgrService {
     // 添加方法
     public boolean addAlgInfo(AlgInfo algInfo);
     // 通过Id删除算法
-    public boolean deleteAlgInfoById(String algId);
+    public AlgDeleteResult deleteAlgInfoById(String algId);
     // 通过Id查找算法
     public AlgInfo getAlgInfoById(String algId);
     // 通过名字查找算法

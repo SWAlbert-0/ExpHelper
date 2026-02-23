@@ -6,7 +6,7 @@
         <el-button type="success" icon="el-icon-plus" @click="addForm()">添加</el-button>
       </el-col>
       <el-col :span="2">
-        <el-button type="danger" icon="el-icon-delete" @click="deleteBatch()">批量删除</el-button>
+        <el-button type="danger" icon="el-icon-delete" :loading="batchDeleteLoading" @click="deleteBatch()">批量删除</el-button>
       </el-col>
       <el-col :span="20">
         <el-form :inline="true" class="demo-form-inline" align="center">
@@ -14,7 +14,7 @@
             <el-input v-model="instName" placeholder="请输入实例名" clearable/>
           </el-form-item>
           <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getByInstName()">查询</el-button>
-          <el-button type="default" icon="el-icon-refresh" @click="back()">返回</el-button>
+          <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
         </el-form>
       </el-col>
     </el-row>
@@ -36,7 +36,14 @@
         <template slot-scope="scope">
           <el-button type="primary" size="mini" icon="el-icon-view" @click="getForm(scope.row)">查看</el-button>
           <el-button type="primary" size="mini" icon="el-icon-edit" @click="updateForm(scope.row)">编辑</el-button>
-          <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteForm(scope.row.instId)">删除</el-button>
+          <el-button
+            type="danger"
+            size="mini"
+            icon="el-icon-delete"
+            :loading="!!deletingProbIds[scope.row.instId]"
+            :disabled="!!deletingProbIds[scope.row.instId]"
+            @click="deleteForm(scope.row.instId)"
+          >删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -118,6 +125,8 @@ export default {
     return {
       tableData: [],
       multipleSelection: [],
+      deletingProbIds: {},
+      batchDeleteLoading: false,
       dialogVisible:false,
       canEdit: false,
       tableLoading: false,
@@ -220,6 +229,13 @@ export default {
         this.tableLoading = false;
       });
     },
+    refreshCurrentList() {
+      if (this.instName != "") {
+        this.getByInstName();
+      } else {
+        this.listProbInsts();
+      }
+    },
     back(){
       this.tableLoading = true;
       getProbInstList(1,10).then(res => {
@@ -277,9 +293,20 @@ export default {
         type: "warning",
       })
         .then(() => {
+          this.$set(this.deletingProbIds, instId, true);
           deleteProbInstById(instId).then((res) => {
-            this.$message({type: "success", message: "删除成功",});
-            this.listProbInsts();
+            const state = this.extractDeleteState(res, instId);
+            if (state.deletedCount > 0) {
+              const repairedText = state.repaired ? "，已自动修复历史数据" : "";
+              this.$message({type: "success", message: `删除成功（proId=${instId}${repairedText}）`,});
+            } else if (state.noop) {
+              this.$message({type: "info", message: `记录已不存在（proId=${instId}），列表已同步`,});
+            }
+          }).catch((error) => {
+            this.$message({type: "error", message: this.extractDeleteErrorMessage(error, instId),});
+          }).finally(() => {
+            this.$delete(this.deletingProbIds, instId);
+            this.refreshCurrentList();
           });
         })
         .catch(() => {
@@ -299,13 +326,58 @@ export default {
           type: "warning",
         })
           .then(() => {
+            this.batchDeleteLoading = true;
             const tasks = this.multipleSelection.map(item => deleteProbInstById(item.instId));
-            Promise.all(tasks).then(() => {
-              this.$message({type: "success", message: "删除成功",});
-              this.listProbInsts();
+            Promise.allSettled(tasks).then((results) => {
+              let deletedCount = 0;
+              let noopCount = 0;
+              let blockedCount = 0;
+              let repairedCount = 0;
+              const blockedIds = [];
+              const failedIds = [];
+              for (let i = 0; i < results.length; i++) {
+                const current = results[i];
+                const currentId = this.multipleSelection[i] && this.multipleSelection[i].instId ? this.multipleSelection[i].instId : "";
+                if (current.status === "fulfilled") {
+                  const state = this.extractDeleteState(current.value, currentId);
+                  if (state.deletedCount > 0) {
+                    deletedCount += 1;
+                    if (state.repaired) {
+                      repairedCount += 1;
+                    }
+                  } else if (state.noop) {
+                    noopCount += 1;
+                  } else {
+                    failedIds.push(currentId);
+                  }
+                } else if (this.isDeleteBlockedError(current.reason)) {
+                  blockedCount += 1;
+                  blockedIds.push(currentId);
+                } else {
+                  failedIds.push(currentId);
+                }
+              }
+              const totalSuccess = deletedCount + noopCount;
+              if (blockedCount === 0 && failedIds.length === 0) {
+                const repairedText = repairedCount > 0 ? `，自动修复 ${repairedCount} 条` : "";
+                const noopText = noopCount > 0 ? `，同步不存在 ${noopCount} 条` : "";
+                this.$message({type: "success", message: `删除完成：成功删除 ${deletedCount} 条${repairedText}${noopText}`,});
+              } else if (totalSuccess === 0 && blockedCount > 0 && failedIds.length === 0) {
+                this.$message({type: "warning", message: `删除被阻止：${this.formatFailedIds(blockedIds)} 仍被执行计划引用`,});
+              } else {
+                const repairedText = repairedCount > 0 ? `，自动修复 ${repairedCount} 条` : "";
+                const noopText = noopCount > 0 ? `，同步不存在 ${noopCount} 条` : "";
+                const blockedText = blockedCount > 0 ? `，阻止 ${blockedCount} 条（${this.formatFailedIds(blockedIds)}）` : "";
+                const failedText = failedIds.length > 0 ? `，失败 ${failedIds.length} 条（${this.formatFailedIds(failedIds)}）` : "";
+                this.$message({type: "warning", message: `批量删除完成：删除 ${deletedCount} 条${repairedText}${noopText}${blockedText}${failedText}`,});
+              }
+            }).finally(() => {
+              this.batchDeleteLoading = false;
+              this.refreshCurrentList();
             });
           })
           .catch(() => {
+            this.batchDeleteLoading = false;
             this.$message({
               type: "info",
               message: "取消删除",
@@ -382,6 +454,63 @@ export default {
       var categoryNames = this.categoryNames;
       var results = queryString ? categoryNames.filter(this.createFilter(queryString)) : categoryNames;
       cb(results);
+    },
+    extractDeletedCount(res) {
+      if (!res || !res.data) {
+        return 0;
+      }
+      const raw = res.data.deletedCount;
+      if (typeof raw === "number") {
+        return raw;
+      }
+      const parsed = Number(raw);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    },
+    extractDeleteState(res, proId) {
+      const deletedCount = this.extractDeletedCount(res);
+      const repaired = !!(res && res.data && res.data.repaired === true);
+      const noop = !!(res && res.data && res.data.noop === true) || deletedCount <= 0;
+      return { proId: proId, deletedCount: deletedCount, repaired: repaired, noop: noop };
+    },
+    extractBackendErrorCode(error) {
+      return error && error.response && error.response.data ? error.response.data.errorCode : "";
+    },
+    isDeleteBlockedError(error) {
+      const code = this.extractBackendErrorCode(error);
+      if (code === "PROB_IN_USE") {
+        return true;
+      }
+      const responseMessage = error && error.message ? error.message : "";
+      return responseMessage.includes("问题实例已被执行计划引用");
+    },
+    extractDeleteErrorMessage(error, proId) {
+      const fallback = `删除失败（proId=${proId}）：请稍后重试`;
+      if (!error) {
+        return fallback;
+      }
+      if (this.isDeleteBlockedError(error)) {
+        const data = error.response && error.response.data ? error.response.data.data : null;
+        const refCount = data && data.refPlanCount ? data.refPlanCount : 0;
+        const planNames = data && Array.isArray(data.refPlanNames) ? data.refPlanNames.filter(Boolean) : [];
+        if (refCount > 0) {
+          const planText = planNames.length > 0 ? `（${planNames.join("、")}）` : "";
+          return `删除失败（proId=${proId}）：仍被 ${refCount} 个执行计划引用${planText}`;
+        }
+        return `删除失败（proId=${proId}）：问题实例已被执行计划引用，请先解除关联`;
+      }
+      const responseMessage = error.response && error.response.data && (error.response.data.msg || error.response.data.message);
+      const message = responseMessage || error.message || "";
+      return message ? `删除失败（proId=${proId}）：${message}` : fallback;
+    },
+    formatFailedIds(ids) {
+      const validIds = (ids || []).filter((id) => !!id);
+      if (validIds.length === 0) {
+        return "记录ID未知";
+      }
+      if (validIds.length <= 3) {
+        return `proId=${validIds.join("、")}`;
+      }
+      return `proId=${validIds.slice(0, 3).join("、")} 等 ${validIds.length} 条`;
     },
     createFilter(queryString) {
       return (categoryName) => {

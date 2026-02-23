@@ -1,6 +1,8 @@
 package fjnu.edu.probInstMgr.dao;
 
 import fjnu.edu.probInstMgr.entity.ProbInst;
+import fjnu.edu.probInstMgr.entity.ProbDeleteResult;
+import com.mongodb.client.result.DeleteResult;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -31,14 +33,30 @@ public class ProbInstDao {
             @CacheEvict("probInstMgr"),
             @CacheEvict(value = "probInstMgr.list", allEntries = true)
     })*/
-    public boolean delProbInstByID(String instId) {
+    public ProbDeleteResult delProbInstByID(String instId) {
+        ProbDeleteResult deleteResult = new ProbDeleteResult();
         if (!StringUtils.hasText(instId)) {
-            return false;
+            deleteResult.setDeletedCount(0L);
+            deleteResult.setRepaired(false);
+            deleteResult.setNoop(true);
+            return deleteResult;
         }
         Query query = new Query(buildIdCriteria(instId));
-        mongoTemplate.remove(query, "probInstMgr");
-
-        return true;
+        DeleteResult primaryResult = mongoTemplate.remove(query, "probInstMgr");
+        long primaryDeleted = primaryResult == null ? 0L : primaryResult.getDeletedCount();
+        if (primaryDeleted > 0) {
+            deleteResult.setDeletedCount(primaryDeleted);
+            deleteResult.setRepaired(false);
+            deleteResult.setNoop(false);
+            return deleteResult;
+        }
+        Query legacyQuery = new Query(Criteria.where("instId").is(instId));
+        DeleteResult legacyResult = mongoTemplate.remove(legacyQuery, "probInstMgr");
+        long legacyDeleted = legacyResult == null ? 0L : legacyResult.getDeletedCount();
+        deleteResult.setDeletedCount(legacyDeleted);
+        deleteResult.setRepaired(legacyDeleted > 0);
+        deleteResult.setNoop(legacyDeleted <= 0);
+        return deleteResult;
     }
 
     public ProbInst getProbInstByID(String instId) {

@@ -26,6 +26,9 @@ public enum ErrorCode {
     PLAN_ID_EMPTY("PLAN_ID_EMPTY"),
     PLAN_ID_FORMAT_INVALID("PLAN_ID_FORMAT_INVALID"),
     PLAN_NOT_FOUND("PLAN_NOT_FOUND"),
+    ALG_NOT_FOUND("ALG_NOT_FOUND"),
+    ALG_IN_USE("ALG_IN_USE"),
+    PROB_IN_USE("PROB_IN_USE"),
 
     AVATAR_FILE_EMPTY("AVATAR_FILE_EMPTY"),
     AVATAR_FILE_TYPE_INVALID("AVATAR_FILE_TYPE_INVALID"),
@@ -42,4 +45,3 @@ public enum ErrorCode {
         return code;
     }
 }
-

@@ -4,6 +4,7 @@ package fjnu.edu.alglibmgr.service.impl;
 import fjnu.edu.alglibmgr.dao.AlgLibMgrDao;
 import fjnu.edu.alglibmgr.entity.DefPara;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
+import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
 import fjnu.edu.alglibmgr.service.AlgLibMgrService;
 import fjnu.edu.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,10 +30,9 @@ public class AlgLibMgrServiceImpl implements AlgLibMgrService {
 	}
 
 	@Override
-	public boolean deleteAlgInfoById(String algId) {
+	public AlgDeleteResult deleteAlgInfoById(String algId) {
 		try {
-			AlgLibDao.deleteAlgInfoById(algId);
-			return true;
+			return AlgLibDao.deleteAlgInfoById(algId);
 		}catch (Exception e){
 			throw new BusinessException("删除算法失败");
 		}

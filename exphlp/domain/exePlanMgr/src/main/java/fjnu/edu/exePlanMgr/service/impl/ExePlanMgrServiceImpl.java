@@ -3,6 +3,7 @@ package fjnu.edu.exePlanMgr.service.impl;
 import fjnu.edu.common.exception.BusinessException;
 import fjnu.edu.exePlanMgr.dao.ExePlanMgrDao;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
+import fjnu.edu.exePlanMgr.entity.ExePlanLog;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import fjnu.edu.probInstMgr.dao.ProbInstDao;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +57,41 @@ public class ExePlanMgrServiceImpl implements ExePlanMgrService {
         } catch (Exception e) {
             throw new BusinessException("获取执行计划个数失败");
         }
+    }
+
+    @Override
+    public long countPlansByProbInstId(String probInstId) {
+        return exePlanMgrDao.countPlansByProbInstId(probInstId);
+    }
+
+    @Override
+    public List<String> listPlanNamesByProbInstId(String probInstId, int limit) {
+        return exePlanMgrDao.listPlanNamesByProbInstId(probInstId, limit);
+    }
+
+    @Override
+    public long countPlansByAlgId(String algId) {
+        return exePlanMgrDao.countPlansByAlgId(algId);
+    }
+
+    @Override
+    public List<String> listPlanNamesByAlgId(String algId, int limit) {
+        return exePlanMgrDao.listPlanNamesByAlgId(algId, limit);
+    }
+
+    @Override
+    public void appendPlanLog(ExePlanLog exePlanLog) {
+        exePlanMgrDao.appendPlanLog(exePlanLog);
+    }
+
+    @Override
+    public List<ExePlanLog> getPlanLogs(String planId, long afterSeq, int limit) {
+        return exePlanMgrDao.getPlanLogs(planId, afterSeq, limit);
+    }
+
+    @Override
+    public long getLatestPlanLogSeq(String planId) {
+        return exePlanMgrDao.getLatestPlanLogSeq(planId);
     }
 
 }

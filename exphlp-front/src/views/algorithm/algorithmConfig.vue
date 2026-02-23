@@ -6,7 +6,7 @@
         <el-button type="success" icon="el-icon-plus" @click="openAlgInfoAddForm()">添加</el-button>
       </el-col>
       <el-col :span="2">
-        <el-button type="danger" icon="el-icon-delete" @click="deleteBatch()">批量删除</el-button>
+        <el-button type="danger" icon="el-icon-delete" :loading="batchDeleteLoading" @click="deleteBatch()">批量删除</el-button>
       </el-col>
       <el-col :span="20">
         <el-form :inline="true" class="demo-form-inline" align="center">
@@ -14,7 +14,7 @@
             <el-input v-model="algName" placeholder="请输入算法名称" clearable/>
           </el-form-item>
           <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getByAlgName()">查询</el-button>
-          <el-button type="default" icon="el-icon-refresh" @click="back()">返回</el-button>
+          <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
         </el-form>
       </el-col>
     </el-row>
@@ -39,7 +39,14 @@
       <el-table-column label="操作" align="center" width="250">
         <template slot-scope="scope">
           <el-button type="primary" size="mini" icon="el-icon-edit" @click="openAlgInfoUpdateForm(scope.row)">编辑</el-button>
-          <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteAlgInfo(scope.row.algId)">删除</el-button>
+          <el-button
+            type="danger"
+            size="mini"
+            icon="el-icon-delete"
+            :loading="!!deletingAlgIds[scope.row.algId]"
+            :disabled="!!deletingAlgIds[scope.row.algId]"
+            @click="deleteAlgInfo(scope.row.algId)"
+          >删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -69,8 +76,8 @@
         <el-form-item label="算法名称" prop="algName">
           <el-input v-model="algInfoAddForm.algName" placeholder="请输入算法名称" ></el-input>
         </el-form-item>
-        <el-form-item label="服务名">
-          <el-input v-model="algInfoAddForm.algName" placeholder="服务名"></el-input>
+        <el-form-item label="服务名" prop="serviceName">
+          <el-input v-model="algInfoAddForm.serviceName" placeholder="服务名"></el-input>
         </el-form-item>
         <el-form-item label="算法描述" prop="description">
           <el-input type="textarea" v-model="algInfoAddForm.description" placeholder="请输入算法描述" ></el-input>
@@ -173,8 +180,8 @@
         <el-form-item label="算法名称">
           <el-input v-model="algInfoUpdateForm.algName" readonly></el-input>
         </el-form-item>
-        <el-form-item label="服务名">
-          <el-input v-model="algInfoUpdateForm.serviceName" readonly></el-input>
+        <el-form-item label="服务名" prop="serviceName">
+          <el-input v-model="algInfoUpdateForm.serviceName"></el-input>
         </el-form-item>
         <el-form-item label="算法描述" prop="description">
           <el-input type="textarea" v-model="algInfoUpdateForm.description" placeholder="请输入算法描述"></el-input>
@@ -313,6 +320,8 @@ export default {
       dialogDefParasUpdateFormVisible: false,
       algName: '',
       multipleSelection: [],
+      batchDeleteLoading: false,
+      deletingAlgIds: {},
       algInfo:[],
       defParas:[],
       algInfoAddForm:{
@@ -342,6 +351,10 @@ export default {
         {
           value: "int",
           label: "int",
+        },
+        {
+          value: "long",
+          label: "long",
         },
         {
           value: "double",
@@ -402,6 +415,13 @@ export default {
         this.countAllAlgInfos();
       });
     },
+    refreshCurrentList() {
+      if (this.algName != "") {
+        this.getByAlgName();
+      } else {
+        this.getAlgInfos();
+      }
+    },
     back(){
       getAlgs(1,10).then(res => {
         this.algInfo = res;
@@ -439,7 +459,6 @@ export default {
               this.$message({type: "warning", message: "该算法已存在，请更换算法名",});
             }
             else{
-              this.algInfoAddForm.serviceName = this.algInfoAddForm.algName;
               addAlg(this.algInfoAddForm).then(res => {
                 this.$message({type: "success", message: "添加成功!",});
                 this.getAlgInfos();
@@ -526,9 +545,20 @@ export default {
         type: "warning",
       })
         .then(() => {
+          this.$set(this.deletingAlgIds, algId, true);
           deleteAlgById(algId).then((res) => {
-            this.$message({type: "success", message: "删除成功",});
-            this.getAlgInfos();
+            const state = this.extractDeleteState(res, algId);
+            if (state.deletedCount > 0) {
+              const repairedText = state.repaired ? "，已自动修复历史数据" : "";
+              this.$message({type: "success", message: `删除成功（algId=${algId}${repairedText}）`,});
+            } else if (state.noop) {
+              this.$message({type: "info", message: `记录已不存在（algId=${algId}），列表已同步`,});
+            }
+          }).catch((error) => {
+            this.$message({type: "error", message: this.extractDeleteErrorMessage(error, algId),});
+          }).finally(() => {
+            this.$delete(this.deletingAlgIds, algId);
+            this.refreshCurrentList();
           });
         })
         .catch(() => {
@@ -551,15 +581,61 @@ export default {
           type: "warning",
         })
           .then(() => {
-            for (var i = 0; i < this.multipleSelection.length-1; i++) {
-              deleteAlgById(this.multipleSelection[i].algId);
-            }
-            deleteAlgById(this.multipleSelection[this.multipleSelection.length-1].algId).then((res) => {
-              this.$message({type: "success", message: "删除成功",});
-              this.getAlgInfos();
+            this.batchDeleteLoading = true;
+            const deleteTasks = this.multipleSelection.map((item) => deleteAlgById(item.algId));
+            Promise.allSettled(deleteTasks).then((results) => {
+              let deletedCount = 0;
+              let noopCount = 0;
+              let blockedCount = 0;
+              let repairedCount = 0;
+              const blockedAlgIds = [];
+              const failedAlgIds = [];
+              for (let i = 0; i < results.length; i++) {
+                const current = results[i];
+                const currentAlgId = this.multipleSelection[i] && this.multipleSelection[i].algId ? this.multipleSelection[i].algId : "";
+                if (current.status === "fulfilled") {
+                  const state = this.extractDeleteState(current.value, currentAlgId);
+                  if (state.deletedCount > 0) {
+                    deletedCount += 1;
+                    if (state.repaired) {
+                      repairedCount += 1;
+                    }
+                  } else if (state.noop) {
+                    noopCount += 1;
+                  } else {
+                    failedAlgIds.push(currentAlgId);
+                  }
+                } else {
+                  if (this.isDeleteBlockedError(current.reason)) {
+                    blockedCount += 1;
+                    blockedAlgIds.push(currentAlgId);
+                  } else {
+                    failedAlgIds.push(currentAlgId);
+                  }
+                }
+              }
+
+              const totalSuccess = deletedCount + noopCount;
+              if (blockedCount === 0 && failedAlgIds.length === 0) {
+                const repairedText = repairedCount > 0 ? `，自动修复 ${repairedCount} 条` : "";
+                const noopText = noopCount > 0 ? `，已同步 ${noopCount} 条不存在记录` : "";
+                this.$message({type: "success", message: `删除完成：成功删除 ${deletedCount} 条${repairedText}${noopText}`,});
+              } else if (totalSuccess === 0 && blockedCount > 0 && failedAlgIds.length === 0) {
+                this.$message({type: "warning", message: `删除被阻止：${this.formatFailedIds(blockedAlgIds)} 仍被执行计划引用`,});
+              } else {
+                const repairedText = repairedCount > 0 ? `，自动修复 ${repairedCount} 条` : "";
+                const noopText = noopCount > 0 ? `，同步不存在 ${noopCount} 条` : "";
+                const blockedText = blockedCount > 0 ? `，阻止 ${blockedCount} 条（${this.formatFailedIds(blockedAlgIds)}）` : "";
+                const failedText = failedAlgIds.length > 0 ? `，失败 ${failedAlgIds.length} 条（${this.formatFailedIds(failedAlgIds)}）` : "";
+                this.$message({type: "warning", message: `批量删除完成：删除 ${deletedCount} 条${repairedText}${noopText}${blockedText}${failedText}`,});
+              }
+            }).finally(() => {
+              this.batchDeleteLoading = false;
+              this.refreshCurrentList();
             });
           })
           .catch(() => {
+            this.batchDeleteLoading = false;
             this.$message({
               type: "info",
               message: "取消删除",
@@ -659,6 +735,75 @@ export default {
       countAlgInfosByAlgName(algName).then(res => {
         this.pageHelper.totalSize = res;
       });
+    },
+    extractDeletedCount(res) {
+      if (!res || !res.data) {
+        return 0;
+      }
+      const raw = res.data.deletedCount;
+      if (typeof raw === "number") {
+        return raw;
+      }
+      const parsed = Number(raw);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    },
+    isRepairedDelete(res) {
+      return !!(res && res.data && res.data.repaired === true);
+    },
+    isNoopDelete(res) {
+      return !!(res && res.data && res.data.noop === true);
+    },
+    extractDeleteState(res, algId) {
+      const deletedCount = this.extractDeletedCount(res);
+      const repaired = this.isRepairedDelete(res);
+      const noop = this.isNoopDelete(res) || deletedCount <= 0;
+      return { algId: algId, deletedCount: deletedCount, repaired: repaired, noop: noop };
+    },
+    extractBackendErrorCode(error) {
+      return error && error.response && error.response.data ? error.response.data.errorCode : "";
+    },
+    extractErrorMessage(error, fallback) {
+      if (!error) {
+        return fallback;
+      }
+      const responseMessage = error.response && error.response.data && (error.response.data.msg || error.response.data.message);
+      return responseMessage || error.message || fallback;
+    },
+    isDeleteBlockedError(error) {
+      const code = this.extractBackendErrorCode(error);
+      if (code === "ALG_IN_USE") {
+        return true;
+      }
+      const message = this.extractErrorMessage(error, "");
+      return message.includes("算法已被执行计划引用");
+    },
+    extractDeleteErrorMessage(error, algId) {
+      const fallback = `删除失败（algId=${algId}）：请稍后重试`;
+      if (!error) {
+        return fallback;
+      }
+      if (this.isDeleteBlockedError(error)) {
+        const data = error.response && error.response.data ? error.response.data.data : null;
+        const refCount = data && data.refPlanCount ? data.refPlanCount : 0;
+        const planNames = data && Array.isArray(data.refPlanNames) ? data.refPlanNames.filter(Boolean) : [];
+        if (refCount > 0) {
+          const planText = planNames.length > 0 ? `（${planNames.join("、")}）` : "";
+          return `删除失败（algId=${algId}）：仍被 ${refCount} 个执行计划引用${planText}`;
+        }
+        return `删除失败（algId=${algId}）：算法已被执行计划引用，请先解除关联`;
+      }
+      const message = this.extractErrorMessage(error, "");
+      return message ? `删除失败（algId=${algId}）：${message}` : fallback;
+    },
+    formatFailedIds(ids) {
+      const validIds = (ids || []).filter((id) => !!id);
+      if (validIds.length === 0) {
+        return "失败记录ID未知";
+      }
+      if (validIds.length <= 3) {
+        return `algId=${validIds.join("、")}`;
+      }
+      return `algId=${validIds.slice(0, 3).join("、")} 等 ${validIds.length} 条`;
     },
 
   }

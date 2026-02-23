@@ -2,6 +2,8 @@ package fjnu.edu.alglibmgr.dao;
 
 import fjnu.edu.alglibmgr.entity.DefPara ;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
+import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
+import com.mongodb.client.result.DeleteResult;
 
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -110,14 +112,32 @@ public class AlgLibMgrDao {
 
 
     //通过Id删除算法
-    public boolean deleteAlgInfoById(String algId){
+    public AlgDeleteResult deleteAlgInfoById(String algId){
+        AlgDeleteResult deleteResult = new AlgDeleteResult();
         if (!StringUtils.hasText(algId)) {
-            return false;
+            deleteResult.setDeletedCount(0L);
+            deleteResult.setRepaired(false);
+            deleteResult.setNoop(true);
+            return deleteResult;
         }
-        Query query = new Query(buildIdCriteria(algId));
-        mongoTemplate.remove(query, "algLibMgr");
+        Query primaryQuery = new Query(buildIdCriteria(algId));
+        DeleteResult primaryResult = mongoTemplate.remove(primaryQuery, "algLibMgr");
+        long primaryDeleted = primaryResult == null ? 0L : primaryResult.getDeletedCount();
+        if (primaryDeleted > 0) {
+            deleteResult.setDeletedCount(primaryDeleted);
+            deleteResult.setRepaired(false);
+            deleteResult.setNoop(false);
+            return deleteResult;
+        }
 
-        return true;
+        // 兼容历史脏数据：曾有文档将业务id保存在 algId 字段而非 _id
+        Query legacyQuery = new Query(Criteria.where("algId").is(algId));
+        DeleteResult legacyResult = mongoTemplate.remove(legacyQuery, "algLibMgr");
+        long legacyDeleted = legacyResult == null ? 0L : legacyResult.getDeletedCount();
+        deleteResult.setDeletedCount(legacyDeleted);
+        deleteResult.setRepaired(legacyDeleted > 0);
+        deleteResult.setNoop(legacyDeleted <= 0);
+        return deleteResult;
     }
 
     //更新算法
