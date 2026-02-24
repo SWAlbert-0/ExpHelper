@@ -1,6 +1,7 @@
 package fjnu.edu.controller;
 
 import fjnu.edu.auth.AuthUser;
+import fjnu.edu.mail.MailSendResult;
 import fjnu.edu.notify.entity.NotificationOutbox;
 import fjnu.edu.notify.entity.UserNotifyProfile;
 import fjnu.edu.notify.service.NotificationService;
@@ -79,5 +80,27 @@ class NotificationCtrlTest {
         Map<String, Object> response = controller.resend("n-1", request);
         assertEquals(403, response.get("code"));
     }
-}
 
+    @Test
+    void testSendRequiresLogin() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        Map<String, Object> response = controller.testSend(request);
+        assertEquals(401, response.get("code"));
+    }
+
+    @Test
+    void testSendReturnsSuccess() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("authUser", new AuthUser("u-1", "admin", 1));
+        UserInfo user = new UserInfo();
+        user.setUserId("u-1");
+        user.setUserName("admin");
+        user.setEmail("admin@example.com");
+        when(platMgrService.getUserById("u-1")).thenReturn(user);
+        when(notificationService.sendProfileTestMail("u-1", "admin@example.com", "admin"))
+                .thenReturn(MailSendResult.sent());
+
+        Map<String, Object> response = controller.testSend(request);
+        assertEquals(200, response.get("code"));
+    }
+}

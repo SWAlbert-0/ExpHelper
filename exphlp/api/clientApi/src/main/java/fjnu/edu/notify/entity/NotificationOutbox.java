@@ -21,6 +21,10 @@ public class NotificationOutbox {
     private String toEmail;
     private String subject;
     private String content;
+    private String contentHtml;
+    private String contentMode;
+    private long renderedAt;
+    private String renderedAtText;
 
     private int retryCount;
     private long nextRetryAt;
@@ -30,4 +34,3 @@ public class NotificationOutbox {
     private long createdAt;
     private long updatedAt;
 }
-

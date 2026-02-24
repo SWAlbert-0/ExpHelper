@@ -10,8 +10,15 @@
 ## 快速入口
 
 - 用户先看：`docs/user/快速上手-从部署到执行.md`
+- 运行自检脚本：`scripts/check-runtime-readiness.ps1`
 - 开发与联调：`docs/dev/接口总览-v2.md`
+- 维护排障：`docs/dev/维护手册.md`
 - 错误码：`docs/dev/错误码映射-v2.md`
 - 历史记录：`docs/dev/开发日志.md`
 - 示例案例：`docs/examples/moo-nsga2-zdt1/README.md`
 
+## 常用脚本
+
+- 运行体检：`scripts/check-runtime-readiness.ps1`
+- 一键重建：`scripts/rebuild-webapp-front.ps1`
+- 质量门禁：`scripts/check-p0.ps1`

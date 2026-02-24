@@ -132,3 +132,9 @@ Use separate terminals for backend and frontend.
   - `docs/archive/` for historical materials.
 - Put temporary artifacts under `temp/` only, and never commit runtime logs/screenshots/cache snapshots.
 - When large Vue pages exceed maintainable size, extract high-change flows (execute/log/result/delete) into `modules/` and keep container page as orchestration layer.
+
+### 9) Configuration Inventory Rule (Mandatory)
+- The canonical configuration inventory is `docs/dev/配置清单.md`.
+- Any change that adds/modifies runtime or deployment config must update `docs/dev/配置清单.md` in the same delivery.
+- Before completion, run:
+  - `powershell -ExecutionPolicy Bypass -File scripts/check-config-doc.ps1`

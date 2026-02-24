@@ -47,6 +47,16 @@ class AlgRltSaveCtrlTest {
     }
 
     @Test
+    void supportsMissingAlgName() {
+        when(algRltSaveService.getAlgSaveByAlgName("p1", "a1", null)).thenReturn(null);
+
+        List<DisplayResult> result = ctrl.getAlgSaveByAlgName("p1", "a1", null);
+
+        assertNotNull(result);
+        assertEquals(0, result.size());
+    }
+
+    @Test
     void fallsBackToProbInstIdWhenProblemMissing() {
         GenResult genResult = new GenResult();
         genResult.setProbInstId("prob-1");

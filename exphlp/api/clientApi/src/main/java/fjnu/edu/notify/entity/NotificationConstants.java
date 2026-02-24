@@ -15,5 +15,7 @@ public final class NotificationConstants {
 
     public static final String SOURCE_AUTO = "AUTO";
     public static final String SOURCE_MANUAL_RESEND = "MANUAL_RESEND";
-}
 
+    public static final String CONTENT_MODE_TEXT_ONLY = "TEXT_ONLY";
+    public static final String CONTENT_MODE_TEXT_HTML = "TEXT_HTML";
+}

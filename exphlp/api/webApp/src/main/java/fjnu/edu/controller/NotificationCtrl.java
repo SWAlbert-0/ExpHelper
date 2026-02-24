@@ -136,6 +136,24 @@ public class NotificationCtrl {
         return ApiResponse.ok(request, data, "补发任务创建完成");
     }
 
+    @PostMapping("/testSend")
+    public Map<String, Object> testSend(HttpServletRequest request) {
+        UserInfo user = currentUser(request);
+        if (user == null) {
+            return ApiResponse.failed(request, 401, "未登录", ErrorCode.AUTH_UNAUTHORIZED.code());
+        }
+        fjnu.edu.mail.MailSendResult result = notificationService.sendProfileTestMail(user.getUserId(), user.getEmail(), user.getUserName());
+        if (result != null && result.isSent()) {
+            Map<String, Object> data = new HashMap<>();
+            data.put("reasonCode", result.getReasonCode());
+            data.put("message", result.getMessage());
+            return ApiResponse.ok(request, data, "测试邮件发送成功");
+        }
+        String reasonCode = result == null ? "MAIL_SEND_FAILED" : result.getReasonCode();
+        String message = result == null ? "测试邮件发送失败" : result.getMessage();
+        return ApiResponse.failed(request, 400, message, reasonCode);
+    }
+
     private AuthUser currentAuth(HttpServletRequest request) {
         Object auth = request.getAttribute("authUser");
         if (auth instanceof AuthUser) {
@@ -183,4 +201,3 @@ public class NotificationCtrl {
         }
     }
 }
-

@@ -1,5 +1,6 @@
 package fjnu.edu.controller;
 
+import fjnu.edu.Main;
 import fjnu.edu.auth.AuthUser;
 import fjnu.edu.auth.ApiResponse;
 import fjnu.edu.auth.ErrorCode;
@@ -24,11 +25,14 @@ import org.springframework.web.bind.annotation.*;
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @RestController
 @CrossOrigin
@@ -264,7 +268,11 @@ public class AuthController {
 
     @GetMapping("/healthz")
     public Map<String, Object> healthz(HttpServletRequest request) {
-        return ApiResponse.ok(request, "ok");
+        Map<String, Object> data = new HashMap<>();
+        data.put("status", "ok");
+        data.put("artifactVersion", resolveArtifactVersion());
+        data.put("buildTime", resolveBuildTime());
+        return ApiResponse.ok(request, data);
     }
 
     private UserInfo currentUser(HttpServletRequest request) {
@@ -282,5 +290,54 @@ public class AuthController {
 
     private String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private String resolveArtifactVersion() {
+        String version = null;
+        try {
+            Properties props = new Properties();
+            try (var in = Main.class.getResourceAsStream("/META-INF/maven/fjnu.edu/webApp/pom.properties")) {
+                if (in != null) {
+                    props.load(in);
+                    version = props.getProperty("version");
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (!StringUtils.hasText(version)) {
+            Package pkg = getClass().getPackage();
+            version = pkg == null ? null : pkg.getImplementationVersion();
+        }
+        return StringUtils.hasText(version) ? version : "unknown";
+    }
+
+    private String resolveBuildTime() {
+        try {
+            Path path = resolveJarPath();
+            if (!Files.exists(path)) {
+                return "unknown";
+            }
+            long timestamp = Files.getLastModifiedTime(path).toMillis();
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            return sdf.format(new Date(timestamp));
+        } catch (Exception ex) {
+            return "unknown";
+        }
+    }
+
+    private Path resolveJarPath() {
+        String cmd = System.getProperty("sun.java.command", "");
+        if (StringUtils.hasText(cmd)) {
+            String mainToken = Pattern.compile("\\s+").split(cmd.trim(), 2)[0];
+            if (mainToken.endsWith(".jar")) {
+                return Paths.get(mainToken).toAbsolutePath().normalize();
+            }
+        }
+        try {
+            URL location = Main.class.getProtectionDomain().getCodeSource().getLocation();
+            return Paths.get(location.toURI()).toAbsolutePath().normalize();
+        } catch (Exception ignored) {
+            return Paths.get(".").toAbsolutePath().normalize();
+        }
     }
 }

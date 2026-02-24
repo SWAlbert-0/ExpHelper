@@ -32,7 +32,9 @@ public class AlgRltSaveCtrl {
     ProbInstMgrService probInstMgrService;
 
     @GetMapping("/getAlgSaveByAlgName")
-    public List<DisplayResult> getAlgSaveByAlgName(@RequestParam(value = "planId") String planId, @RequestParam(value = "algId") String algId, @RequestParam(value = "algName") String algName) {
+    public List<DisplayResult> getAlgSaveByAlgName(@RequestParam(value = "planId") String planId,
+                                                    @RequestParam(value = "algId") String algId,
+                                                    @RequestParam(value = "algName", required = false) String algName) {
         PlanExeResult  planExeResult = algRltSaveService.getAlgSaveByAlgName(planId,algId,algName);
         List<DisplayResult>  displayResults= new ArrayList<>();
         if (planExeResult == null || planExeResult.getGenResults() == null || planExeResult.getGenResults().isEmpty()) {

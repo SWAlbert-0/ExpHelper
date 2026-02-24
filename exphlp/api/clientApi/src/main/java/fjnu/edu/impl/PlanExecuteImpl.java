@@ -2,6 +2,7 @@ package fjnu.edu.impl;
 
 import fjnu.edu.alglibmgr.service.AlgLibMgrService;
 import fjnu.edu.entity.EachResult;
+import fjnu.edu.entity.ExeResultDetail;
 import fjnu.edu.entity.GenResult;
 import fjnu.edu.entity.OutPuter;
 import fjnu.edu.entity.PlanExeResult;
@@ -31,7 +32,9 @@ import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
 import java.util.UUID;
@@ -189,13 +192,23 @@ public class PlanExecuteImpl implements PlanExecuteService {
             exePlan.setExeState(Constant.NORMAL_TERMINATION);
             exePlan.setLastError(null);
             appendPlanLog(planId, executionId, "INFO", "PLAN_DONE", "计划执行完成", null, null, null, null);
-            notifyPlanResult(exePlan, true);
+            Map<String, ExeResultDetail> resultDetails = collectResultDetails(exePlan);
+            appendPlanLog(planId, executionId, "INFO", "MAIL_NOTIFY",
+                    "准备通知邮件指标快照",
+                    null, null, null, "algCount=" + (exePlan.getAlgRunInfos() == null ? 0 : exePlan.getAlgRunInfos().size())
+                            + ";resultDetailCount=" + resultDetails.size());
+            notifyPlanResult(exePlan, true, resultDetails);
         } catch (Exception ex) {
             markFailed(exePlan, extractErrorMessage(ex));
             appendPlanLog(planId, exePlan.getExecutionId(), "ERROR", "PLAN_FAIL",
                     "计划执行失败: " + extractErrorMessage(ex), null, null, null,
                     ex.getClass().getSimpleName());
-            notifyPlanResult(exePlan, false);
+            Map<String, ExeResultDetail> resultDetails = collectResultDetails(exePlan);
+            appendPlanLog(planId, exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
+                    "准备通知邮件指标快照",
+                    null, null, null, "algCount=" + (exePlan.getAlgRunInfos() == null ? 0 : exePlan.getAlgRunInfos().size())
+                            + ";resultDetailCount=" + resultDetails.size());
+            notifyPlanResult(exePlan, false, resultDetails);
             return;
         } finally {
             exePlan.setExeEndTime(System.currentTimeMillis());
@@ -265,10 +278,31 @@ public class PlanExecuteImpl implements PlanExecuteService {
         exePlan.setLastError(detail);
     }
 
-    private void notifyPlanResult(ExePlan exePlan, boolean success) {
-        int created = notificationService.enqueuePlanDoneNotifications(exePlan, success);
+    private void notifyPlanResult(ExePlan exePlan, boolean success, Map<String, ExeResultDetail> resultDetailsByAlgId) {
+        int created = notificationService.enqueuePlanDoneNotifications(exePlan, success, resultDetailsByAlgId);
         appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
                 "通知任务入队完成，已创建任务数=" + created, null, null, null, "reasonCode=MAIL_OUTBOX_ENQUEUED");
+    }
+
+    private Map<String, ExeResultDetail> collectResultDetails(ExePlan exePlan) {
+        Map<String, ExeResultDetail> map = new HashMap<>();
+        if (exePlan == null || exePlan.getAlgRunInfos() == null) {
+            return map;
+        }
+        for (AlgRunInfo algRunInfo : exePlan.getAlgRunInfos()) {
+            if (algRunInfo == null || algRunInfo.getAlgId() == null) {
+                continue;
+            }
+            try {
+                ExeResultDetail detail = algRltSaveService.getExeResultDetail(exePlan.getPlanId(), algRunInfo.getAlgId());
+                if (detail != null) {
+                    map.put(algRunInfo.getAlgId(), detail);
+                }
+            } catch (RuntimeException ignored) {
+                // 邮件指标为增强信息，失败不影响主流程。
+            }
+        }
+        return map;
     }
 
     private String extractErrorMessage(Throwable throwable) {
