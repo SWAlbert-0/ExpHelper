@@ -16,6 +16,7 @@ Thumbs.db
 **/node_modules/
 docker/.env
 docker/*.jar
+.m2repo/
 
 # Local docs conversion temp files
 docs/.tmp_docx_extract/
