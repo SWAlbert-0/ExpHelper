@@ -55,3 +55,10 @@ export function uploadAvatar(data) {
     }
   });
 }
+
+export function getHealthz() {
+  return request({
+    url: "/api/auth/healthz",
+    method: "get"
+  });
+}

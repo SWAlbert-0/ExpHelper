@@ -1,5 +1,12 @@
 <template>
   <div class="app-container">
+    <el-alert
+      class="page-tip"
+      title="平台管理：维护用户基础信息，可用于执行计划通知。建议先查询后编辑，避免误操作。"
+      type="info"
+      :closable="false"
+      show-icon
+    />
     <div class="toolbar">
       <div class="toolbar-left">
         <el-button type="success" icon="el-icon-plus" @click="addForm()">添加</el-button>
@@ -20,6 +27,7 @@
       border
       fit
       highlight-current-row
+      class="platform-table"
       @selection-change="handleSelectionChange"
     >
       <!-- 多选框 -->
@@ -29,7 +37,7 @@
       <el-table-column prop="wechat" label="wechat" min-width="180" align="center"></el-table-column>
       <el-table-column prop="mobile" label="手机号" min-width="140" align="center"></el-table-column>
       <el-table-column prop="qq" label="QQ号" min-width="120" align="center"></el-table-column>
-      <el-table-column label="操作" align="center" width="300">
+      <el-table-column label="操作" align="center" width="320">
         <template slot-scope="scope">
           <div class="op-buttons">
             <el-button type="primary" size="mini" icon="el-icon-edit" @click="updateForm(scope.row)">编辑</el-button>
@@ -346,6 +354,17 @@ export default {
 </script>
 
 <style lang="less" scoped>
+.app-container {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.page-tip {
+  margin-bottom: 12px;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -372,7 +391,7 @@ export default {
 }
 
 .toolbar-right /deep/ .el-input {
-  width: 270px;
+  width: 300px;
 }
 
 .op-buttons {
@@ -382,6 +401,17 @@ export default {
   gap: 8px;
   flex-wrap: nowrap;
   white-space: nowrap;
+}
+
+.platform-table /deep/ .el-table th {
+  background: #f8fafc;
+  color: #4a5568;
+  font-weight: 600;
+}
+
+.platform-table /deep/ .el-table td,
+.platform-table /deep/ .el-table th {
+  padding: 9px 0;
 }
 
 @media (max-width: 1200px) {

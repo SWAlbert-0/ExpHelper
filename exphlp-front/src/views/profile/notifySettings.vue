@@ -1,5 +1,17 @@
 <template>
-  <el-form ref="form" :model="form" label-width="130px">
+  <div>
+    <el-alert
+      title="后端版本检查"
+      :closable="false"
+      type="info"
+      style="margin-bottom: 16px;"
+    >
+      <div slot="default" class="notify-deploy-meta">
+        <span>artifactVersion: {{ deployMeta.artifactVersion }}</span>
+        <span>buildTime: {{ deployMeta.buildTime }}</span>
+      </div>
+    </el-alert>
+    <el-form ref="form" :model="form" label-width="130px">
     <el-form-item label="通知邮箱" prop="email">
       <el-input v-model.trim="form.email" placeholder="用于接收计划执行结束通知" />
     </el-form-item>
@@ -35,19 +47,23 @@
     </el-form-item>
     <el-form-item>
       <el-button type="primary" :loading="saving" @click="save">保存通知设置</el-button>
+      <el-button type="success" :loading="sendingTest" @click="sendTestMail">发送测试邮件</el-button>
       <el-button @click="load">刷新</el-button>
     </el-form-item>
-  </el-form>
+    </el-form>
+  </div>
 </template>
 
 <script>
-import { getNotifyProfile, updateNotifyProfile } from "@/api/exphlp/notification";
+import { getNotifyProfile, testNotifyMail, updateNotifyProfile } from "@/api/exphlp/notification";
+import { getHealthz } from "@/api/auth";
 
 export default {
   name: "NotifySettings",
   data() {
     return {
       saving: false,
+      sendingTest: false,
       form: {
         email: "",
         emailEnabled: true,
@@ -59,13 +75,29 @@ export default {
       },
       quietStart: "23:00",
       quietEnd: "08:00",
+      deployMeta: {
+        artifactVersion: "loading",
+        buildTime: "loading",
+      },
     };
   },
   created() {
+    this.loadHealthz();
     this.load();
   },
   methods: {
+    loadHealthz() {
+      getHealthz().then((res) => {
+        const data = (res && res.data) || {};
+        this.deployMeta.artifactVersion = data.artifactVersion || "unknown";
+        this.deployMeta.buildTime = data.buildTime || "unknown";
+      }).catch(() => {
+        this.deployMeta.artifactVersion = "unknown";
+        this.deployMeta.buildTime = "unknown";
+      });
+    },
     load() {
+      this.loadHealthz();
       getNotifyProfile().then((res) => {
         const data = (res && res.data) || {};
         this.form = {
@@ -94,7 +126,23 @@ export default {
         this.saving = false;
       });
     },
+    sendTestMail() {
+      this.sendingTest = true;
+      testNotifyMail().then(() => {
+        this.$message({ type: "success", message: "测试邮件已发送，请检查你的通知邮箱" });
+      }).finally(() => {
+        this.sendingTest = false;
+      });
+    },
   },
 };
 </script>
 
+<style scoped>
+.notify-deploy-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  line-height: 20px;
+}
+</style>

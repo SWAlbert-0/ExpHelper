@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="user-info-head" @click="editCropper()"><img :src="options.img" title="点击上传头像" class="img-circle img-lg"></div>
+    <div class="user-info-head" @click="editCropper()"><img :src="options.img" title="点击上传头像" class="img-circle img-lg" @error="handleAvatarPreviewError"></div>
     <el-dialog :title="title" :visible.sync="open" width="800px" append-to-body @opened="modalOpened">
       <el-row>
         <el-col :xs="24" :md="12" :style="{height: '350px'}">
@@ -18,7 +18,7 @@
         </el-col>
         <el-col :xs="24" :md="12" :style="{height: '350px'}">
           <div class="avatar-upload-preview">
-            <img :src="previews.url" :style="previews.img">
+            <img :src="previews.url || options.img" :style="previews.img" @error="handleAvatarPreviewError">
           </div>
         </el-col>
       </el-row>
@@ -65,6 +65,7 @@ export default {
     }
   },
   data() {
+    const defaultAvatar = require("@/assets/images/default-avatar.svg");
     return {
       // 是否显示弹出层
       open: false,
@@ -73,13 +74,14 @@ export default {
       // 弹出层标题
       title: "修改头像",
       options: {
-        img: store.getters.avatar, // 裁剪图片的地址
+        img: store.getters.avatar || defaultAvatar, // 裁剪图片的地址
         autoCrop: true, // 是否默认生成截图框
         autoCropWidth: 200, // 默认生成截图框宽度
         autoCropHeight: 200, // 默认生成截图框高度
         fixedBox: true // 固定截图框大小 不允许改变
       },
-      previews: {}
+      previews: {},
+      defaultAvatar
     };
   },
   methods: {
@@ -132,6 +134,10 @@ export default {
           this.visible = false;
         });
       });
+    },
+    handleAvatarPreviewError() {
+      this.options.img = this.defaultAvatar;
+      store.commit("SET_AVATAR", this.defaultAvatar);
     },
     // 实时预览
     realTime(data) {

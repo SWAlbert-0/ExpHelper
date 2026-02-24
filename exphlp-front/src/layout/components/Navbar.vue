@@ -12,10 +12,6 @@
     <div class="right-menu">
       <template v-if="device !== 'mobile'">
         <screenfull id="screenfull" class="right-menu-item hover-effect" />
-
-        <el-tooltip content="布局大小" effect="dark" placement="bottom">
-          <size-select id="size-select" class="right-menu-item hover-effect" />
-        </el-tooltip>
       </template>
 
       <el-dropdown
@@ -23,7 +19,7 @@
         trigger="click"
       >
         <div class="avatar-wrapper">
-          <img :src="avatar" class="user-avatar">
+          <img :src="resolvedAvatar" class="user-avatar" @error="handleAvatarLoadError">
           <i class="el-icon-caret-bottom" />
         </div>
         <el-dropdown-menu slot="dropdown">
@@ -47,7 +43,6 @@ import { mapGetters } from "vuex";
 import Breadcrumb from "@/components/Breadcrumb";
 import Hamburger from "@/components/Hamburger";
 import Screenfull from "@/components/Screenfull";
-import SizeSelect from "@/components/SizeSelect";
 import Search from "@/components/HeaderSearch";
 import RuoYiGit from "@/components/RuoYi/Git";
 import RuoYiDoc from "@/components/RuoYi/Doc";
@@ -57,13 +52,25 @@ export default {
     Breadcrumb,
     Hamburger,
     Screenfull,
-    SizeSelect,
     Search,
     RuoYiGit,
     RuoYiDoc
   },
+  data() {
+    return {
+      avatarLoadFailed: false,
+      avatarWarned: false,
+      defaultAvatar: require("@/assets/images/default-avatar.svg")
+    };
+  },
   computed: {
     ...mapGetters(["sidebar", "avatar", "device"]),
+    resolvedAvatar() {
+      if (this.avatarLoadFailed || !this.avatar) {
+        return this.defaultAvatar;
+      }
+      return this.avatar;
+    },
     setting: {
       get() {
         return this.$store.state.settings.showSettings;
@@ -77,6 +84,18 @@ export default {
     }
   },
   methods: {
+    handleAvatarLoadError() {
+      if (!this.avatarLoadFailed) {
+        this.avatarLoadFailed = true;
+      }
+      if (!this.avatarWarned) {
+        this.avatarWarned = true;
+        this.$message({
+          type: "warning",
+          message: "头像文件不存在，已回退默认头像，请在个人中心重新上传。"
+        });
+      }
+    },
     toggleSideBar() {
       this.$store.dispatch("app/toggleSideBar");
     },
@@ -91,6 +110,12 @@ export default {
           window.location.reload();
         });
       });
+    }
+  },
+  watch: {
+    avatar() {
+      this.avatarLoadFailed = false;
+      this.avatarWarned = false;
     }
   }
 };

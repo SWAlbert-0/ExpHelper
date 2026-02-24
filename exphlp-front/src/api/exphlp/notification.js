@@ -39,3 +39,9 @@ export function resendByExecution(planId, executionId) {
   });
 }
 
+export function testNotifyMail() {
+  return request({
+    url: "/api/notification/testSend",
+    method: "post",
+  });
+}

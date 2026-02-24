@@ -1,10 +1,11 @@
 <template>
-  <div>
+  <div class="plan-manage-page">
     <div v-show="editVisible">
-      <el-container style="height: 700px; border: 1px solid #eee">
-        <el-aside width="400px">
-          <div style="padding-top: 50px">
-            <el-form :model="exePlan" ref="exePlan" label-width="100px" class="demo-dynamic">
+      <el-container class="plan-edit-container">
+        <el-aside width="420px" class="plan-edit-aside">
+          <div class="plan-edit-aside-body">
+            <div class="panel-title">计划基础信息</div>
+            <el-form :model="exePlan" ref="exePlan" label-width="100px" class="demo-dynamic plan-edit-form">
               <el-form-item prop="planName" label="计划名称"
                             :rules="{ required: true, message: '请输入计划名称', trigger: 'blur' }">
                 <el-input v-model="exePlan.planName" placeholder="请输入计划名称" :readonly="!addFlag"></el-input>
@@ -41,32 +42,42 @@
               </el-form-item>
               <el-form-item>
                 <el-button type="success" @click="submitForm('exePlan')" v-if="addFlag == true">确 定</el-button>
-                <el-button type="primary" @click="backToExePlanTable()">返 回</el-button>
+                <el-button type="primary" @click="backToExePlanTable()">返回列表</el-button>
               </el-form-item>
+              <div class="plan-edit-hint">
+                请先确认基础信息，再在右侧完成算法配置与通知人选择。
+              </div>
             </el-form>
           </div>
         </el-aside>
-        <el-main>
+        <el-main class="plan-edit-main">
           <div class="right-card">
             <div v-if="rightVisible" style="height: 100%; overflow: auto">
               <el-steps :active="active" finish-status="success" align-center>
                 <el-step title="算法选择及配置"></el-step>
-                <el-step title="通知人员"></el-step>
-                <el-step title="提交"></el-step>
+                <el-step title="通知人员与保存"></el-step>
               </el-steps>
-              <el-button v-show="this.active != 3" style="margin-top: 12px" @click="next">下一步</el-button>
-              <el-button v-show="this.active != 1" style="margin-top: 12px" @click="prev">上一步</el-button>
+              <div class="step-nav">
+                <el-button v-show="this.active === 1" style="margin-top: 12px" @click="next">下一步</el-button>
+              </div>
             </div>
           </div>
           <div v-show="this.active == 1 && rightVisible">
-            <br>
-            <el-row>
-              <el-col :span="4">
+            <div class="panel-title">算法选择及配置</div>
+            <el-alert
+              title="说明：‘去算法库新建算法’用于创建新算法记录；‘加入计划’用于将当前下拉选中的算法加入本计划。"
+              type="info"
+              :closable="false"
+              show-icon
+              style="margin-bottom: 12px;"
+            />
+            <el-row :gutter="12" class="alg-select-row">
+              <el-col :span="6">
                 <router-link :to="{ path: '/algorithmConfig/index', query: { source: 'planManage' } }">
-                  <el-button type="success">添加算法</el-button>
+                  <el-button type="success">去算法库新建算法</el-button>
                 </router-link>
               </el-col>
-              <el-col :span="15">
+              <el-col :span="14">
                 <el-form :inline="true" class="demo-form-inline" align="center">
                   <el-form-item label="算法">
                     <el-select
@@ -83,8 +94,8 @@
                   </el-form-item>
                 </el-form>
               </el-col>
-              <el-col :span="2">
-                <el-button type="primary" @click="addAlgInfo()">新增</el-button>
+              <el-col :span="4">
+                <el-button type="primary" @click="addAlgInfo()">加入计划</el-button>
               </el-col>
             </el-row>
             <br>
@@ -173,7 +184,7 @@
           </div>
 
           <div v-show="this.active == 2 && rightVisible">
-            <br>
+            <div class="panel-title">通知人员与保存</div>
             <el-table
               :data="userInfos"
               border
@@ -187,95 +198,36 @@
               <el-table-column prop="email" label="邮箱" align="center"></el-table-column>
               <el-table-column prop="wechat" label="微信" align="center"></el-table-column>
             </el-table>
-          </div>
-          <div v-show="this.active == 3 && rightVisible">
-            <br><br><br>
-            <el-button type="primary" @click="submitExePlan()">提 交</el-button>
+            <div class="submit-row">
+              <el-button @click="prev">上一步</el-button>
+              <el-button type="primary" @click="submitExePlan()">保存计划</el-button>
+            </div>
           </div>
         </el-main>
       </el-container>
     </div>
     <div v-show="showExePlanTableVisible">
-      <el-container>
-        <el-header style="padding-top: 20px" height="170px">
-          <el-alert
-            title="推荐使用“执行向导”：问题实例 -> 算法 -> 环境检查 -> 一键执行。服务名必须与 Nacos 注册名一致。"
-            type="info"
-            :closable="false"
-            show-icon
-            style="margin-bottom: 12px;"
+      <el-container class="plan-list-container">
+        <el-header class="plan-list-header" height="180px">
+          <plan-list-header
+            :search="search"
+            :options="options"
+            @update:search="onSearchUpdate"
+            @add="addExePlan"
+            @open-wizard="wizardVisible = true"
+            @open-readiness="runtimeReadinessVisible = true"
+            @delete-batch="deleteBatchExePlan"
+            @query="onSearchQuery"
+            @refresh="clearSearchCondition"
           />
-          <el-form :model="search" :inline="true" class="demo-form-inline" align="center">
-            <el-row type="flex">
-              <el-col :span="5">
-                <el-form-item label="计划名称">
-                  <el-input
-                    v-model="search.planName"
-                    placeholder="请输入计划名称"
-                    clearable
-                  ></el-input>
-                </el-form-item>
-              </el-col>
-              <el-col :span="5">
-                <el-form-item label="计划状态">
-                  <el-select v-model="search.exeState" placeholder="请输入计划状态" clearable>
-                    <el-option
-                      v-for="selectItem in options"
-                      :key="selectItem.value"
-                      :value="selectItem.value"
-                      :label="selectItem.label"
-                    ></el-option>
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :span="5">
-                <el-form-item label="开始日期">
-                  <el-date-picker
-                    v-model="search.exeStartTime"
-                    type="date"
-                    placeholder="选择开始日期"
-                    clearable
-                  >
-                  </el-date-picker>
-                </el-form-item>
-              </el-col>
-              <el-col :span="5">
-                <el-form-item label="结束日期">
-                  <el-date-picker
-                    v-model="search.exeEndTime"
-                    type="date"
-                    placeholder="选择结束日期"
-                    clearable
-                  >
-                  </el-date-picker>
-                </el-form-item>
-              </el-col>
-            </el-row>
-          </el-form>
-          <el-row>
-            <el-col :span="12">
-              <div class="grid-content bg-purple">
-                <el-button type="success" icon="el-icon-plus" @click="addExePlan()">添加</el-button>
-                <el-button type="primary" icon="el-icon-magic-stick" @click="wizardVisible = true">执行向导</el-button>
-                <el-button type="danger" icon="el-icon-delete" @click="deleteBatchExePlan()">批量删除</el-button>
-              </div>
-            </el-col>
-            <el-col :span="12">
-              <div class="grid-content action-group-right">
-                <el-button type="primary" icon="el-icon-search"
-                           @click="pageHelper.currentPageNum = 1, searchByCondition()">查询
-                </el-button>
-                <el-button type="default" icon="el-icon-refresh" @click="clearSearchCondition()">刷新</el-button>
-              </div>
-            </el-col>
-          </el-row>
         </el-header>
-        <el-main>
+        <el-main class="plan-list-main">
           <el-table
             :data="exePlans"
             border
             fit
             highlight-current-row
+            class="plan-list-table"
             @selection-change="handleSelectionChange1"
           >
             <el-table-column type="selection" width="60" align="center"></el-table-column>
@@ -319,10 +271,17 @@
 
     </div>
     <div v-show="viewVisible">
-      <el-container style="height: 700px; border: 1px solid #eee">
-        <el-aside width="400px">
-          <div style="padding-top: 50px">
-            <el-form :model="showedExePlan" label-width="80px">
+      <el-container class="plan-view-container">
+        <el-aside width="400px" class="plan-view-aside">
+          <div class="plan-view-aside-body">
+            <div class="panel-title">计划基础信息</div>
+            <div class="plan-view-state-line">
+              <span class="state-label">当前状态</span>
+              <el-tag size="small" :type="showedExePlan.exeState === '正常结束' ? 'success' : (showedExePlan.exeState === '异常结束' ? 'danger' : 'info')">
+                {{ showedExePlan.exeState || "-" }}
+              </el-tag>
+            </div>
+            <el-form :model="showedExePlan" label-width="80px" class="plan-view-form">
               <el-form-item label="计划名称">
                 <el-input v-model="showedExePlan.planName" readonly></el-input>
               </el-form-item>
@@ -352,48 +311,55 @@
                 <el-input type="textarea" v-model="showedExePlan.description" readonly></el-input>
               </el-form-item>
             </el-form>
-            <el-button type="warning" @click="openPlanLogsDialog">执行日志</el-button>
-            <el-button type="primary" @click="backFromView">返 回</el-button>
+            <div class="view-action-row">
+              <el-button type="warning" @click="openPlanLogsDialog">执行日志</el-button>
+              <el-button type="primary" @click="backFromView">返回列表</el-button>
+            </div>
           </div>
         </el-aside>
-        <el-main>
-          <span>算法信息</span>
-          <br><br>
+        <el-main class="plan-view-main">
+          <div class="view-section-card">
+            <div class="panel-title">算法信息</div>
+            <div class="panel-subtitle">可查看每个算法的参数列表和执行结果指标。</div>
           <el-table
+            class="view-table"
             :data="showedExePlan.algRunInfos"
-            height="250"
+            max-height="280"
             border
             highlight-current-row
             style="width: 100%">
-            <el-table-column type="index" label="序号" width="150" align="center"></el-table-column>
-            <el-table-column prop="showedAlgName" label="算法名称" width="180" align="center"></el-table-column>
+            <el-table-column type="index" label="序号" width="70" align="center"></el-table-column>
+            <el-table-column prop="showedAlgName" label="算法名称" min-width="150" align="center"></el-table-column>
             <el-table-column prop="description" label="算法描述" align="center"></el-table-column>
-            <el-table-column prop="runNum" label="运行次数" width="180" align="center"></el-table-column>
-            <el-table-column label="参数列表" align="center">
+            <el-table-column prop="runNum" label="运行次数" width="100" align="center"></el-table-column>
+            <el-table-column label="参数列表" width="90" align="center">
               <template slot-scope="scope">
                 <el-button size="mini" @click="viewRunParas(scope.row)">查看</el-button>
               </template>
             </el-table-column>
-            <el-table-column label="执行结果" align="center">
+            <el-table-column label="执行结果" width="90" align="center">
               <template slot-scope="scope">
                 <el-button size="mini" @click="showExeResults(scope.row)">查看</el-button>
               </template>
             </el-table-column>
           </el-table>
-          <br><br>
-          <span>通知人员</span>
-          <br><br>
+          </div>
+          <div class="view-section-card panel-gap">
+          <div class="panel-title">通知人员</div>
+          <div class="panel-subtitle">用于接收计划执行通知，可在执行日志中查看投递结果。</div>
           <el-table
+            class="view-table"
             :data="showedExePlan.userInfos"
-            height="250"
+            max-height="240"
             border
             highlight-current-row
             style="width: 100%">
-            <el-table-column type="index" label="序号" width="150" align="center"></el-table-column>
-            <el-table-column prop="userName" label="用户名称" width="180" align="center"></el-table-column>
+            <el-table-column type="index" label="序号" width="70" align="center"></el-table-column>
+            <el-table-column prop="userName" label="用户名称" width="140" align="center"></el-table-column>
             <el-table-column prop="email" label="邮箱" align="center"></el-table-column>
-            <el-table-column prop="wechat" label="微信" width="180" align="center"></el-table-column>
+            <el-table-column prop="wechat" label="微信" width="160" align="center"></el-table-column>
           </el-table>
+          </div>
           <el-dialog
             title="参数列表"
             :visible.sync="dialogViewRunParasVisible"
@@ -454,41 +420,87 @@
             :visible.sync="dialogPlanLogsVisible"
             center
             width="70%"
+            custom-class="plan-logs-dialog"
             :before-close="closePlanLogsDialog"
             :close-on-click-modal="false"
           >
-            <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-              <div>
+            <div class="log-toolbar">
+              <div class="log-toolbar-left">
                 <el-radio-group v-model="planLogScope" size="mini" @change="switchPlanLogScope">
                   <el-radio-button label="latest">最新执行</el-radio-button>
                   <el-radio-button label="all">全部历史</el-radio-button>
                 </el-radio-group>
-                <span style="margin-left: 12px; color: #909399;">执行批次：{{ planLogExecutionId || '-' }}</span>
               </div>
-              <div>
+              <div class="log-toolbar-right">
                 <el-button size="mini" icon="el-icon-refresh" @click="fetchPlanLogs(true)">刷新</el-button>
                 <el-button size="mini" icon="el-icon-download" @click="exportPlanLogsAs('csv')">导出CSV</el-button>
                 <el-button size="mini" icon="el-icon-download" @click="exportPlanLogsAs('json')">导出JSON</el-button>
               </div>
             </div>
-            <el-table :data="planLogs" border fit height="420">
+            <el-table :data="planLogs" border fit height="420" class="log-table" :row-class-name="planLogRowClassName">
               <el-table-column property="seq" label="序号" width="90" align="center"></el-table-column>
               <el-table-column property="ts" label="时间" width="180" align="center">
                 <template slot-scope="scope">
                   {{ formatTimestampToDateTime(scope.row.ts) }}
                 </template>
               </el-table-column>
-              <el-table-column property="level" label="级别" width="90" align="center"></el-table-column>
+              <el-table-column property="level" label="级别" width="90" align="center">
+                <template slot-scope="scope">
+                  <el-tag size="mini" :type="planLogLevelTagType(scope.row.level)">{{ scope.row.level || "-" }}</el-tag>
+                </template>
+              </el-table-column>
               <el-table-column property="stage" label="阶段" width="120" align="center"></el-table-column>
-              <el-table-column property="executionId" label="批次ID" width="220" show-overflow-tooltip></el-table-column>
-              <el-table-column property="algId" label="算法ID" width="160" show-overflow-tooltip></el-table-column>
+              <el-table-column label="算法名称" width="180" show-overflow-tooltip>
+                <template slot-scope="scope">
+                  {{ resolveAlgNameByLog(scope.row) }}
+                </template>
+              </el-table-column>
               <el-table-column property="runIndex" label="run" width="70" align="center"></el-table-column>
-              <el-table-column property="probInstId" label="实例ID" width="160" show-overflow-tooltip></el-table-column>
-              <el-table-column property="message" label="内容" min-width="260"></el-table-column>
-              <el-table-column property="details" label="详情" min-width="180" show-overflow-tooltip></el-table-column>
+              <el-table-column label="问题实例" width="180" show-overflow-tooltip>
+                <template slot-scope="scope">
+                  {{ resolveProbInstNameByLog(scope.row) }}
+                </template>
+              </el-table-column>
+              <el-table-column label="内容" min-width="260">
+                <template slot-scope="scope">
+                  <div class="log-cell">
+                    <div :class="['log-cell-content', { expanded: isPlanLogExpanded(scope.row, 'message') }]">
+                      {{ scope.row.message || "-" }}
+                    </div>
+                    <el-button
+                      v-if="(scope.row.message || '').length > 60"
+                      type="text"
+                      class="log-expand-btn"
+                      @click="togglePlanLogExpanded(scope.row, 'message')"
+                    >{{ isPlanLogExpanded(scope.row, 'message') ? '收起' : '展开' }}</el-button>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="详情" min-width="220">
+                <template slot-scope="scope">
+                  <div class="log-cell">
+                    <div :class="['log-cell-content', { expanded: isPlanLogExpanded(scope.row, 'details') }]">
+                      {{ scope.row.details || "-" }}
+                    </div>
+                    <el-button
+                      v-if="(scope.row.details || '').length > 50"
+                      type="text"
+                      class="log-expand-btn"
+                      @click="togglePlanLogExpanded(scope.row, 'details')"
+                    >{{ isPlanLogExpanded(scope.row, 'details') ? '收起' : '展开' }}</el-button>
+                  </div>
+                </template>
+              </el-table-column>
             </el-table>
-            <div style="margin-top: 12px; text-align: left;">
+            <div class="notify-section">
               <el-divider content-position="left">通知记录</el-divider>
+              <el-alert
+                title="若出现 MAIL_CONFIG_INVALID / MAIL_FROM_EMPTY / MAIL_FROM_INVALID，请先补齐SMTP配置；若出现 MAIL_TENCENT_CONFIG_INVALID，请补齐腾讯SES配置。"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="notify-alert"
+              />
               <el-table :data="notificationLogs" border fit height="220" v-loading="notificationLoading">
                 <el-table-column property="createdAt" label="创建时间" width="180" align="center">
                   <template slot-scope="scope">
@@ -512,13 +524,13 @@
                   </template>
                 </el-table-column>
               </el-table>
-              <div style="margin-top: 8px; text-align: right;">
+              <div class="notify-toolbar">
                 <el-button size="mini" icon="el-icon-refresh" @click="fetchNotificationLogs">刷新通知记录</el-button>
                 <el-button size="mini" type="warning" @click="resendFailedByExecution">补发本批次失败通知</el-button>
-                <span style="margin-left: 12px; color: #909399;">共 {{ notificationTotal }} 条</span>
+                <span class="notify-count">共 {{ notificationTotal }} 条</span>
               </div>
             </div>
-            <div style="margin-top: 12px; text-align: right;">
+            <div class="log-footer-actions">
               <el-button size="mini" type="primary" @click="runPreCheckFromLogs">执行前检查</el-button>
               <el-button
                 size="mini"
@@ -526,7 +538,7 @@
                 :disabled="showedExePlan.exeState !== '异常结束'"
                 @click="reExecutePlan(showedExePlan)"
               >重新执行</el-button>
-              <span>计划状态：{{ showedExePlan.exeState }}</span>
+              <span class="log-plan-state">计划状态：{{ showedExePlan.exeState }}</span>
             </div>
           </el-dialog>
         </el-main>
@@ -537,6 +549,12 @@
       :prob-insts="probInsts"
       :alg-infos="algInfos"
       @refresh="clearSearchCondition"
+    />
+    <runtime-readiness-dialog
+      :visible.sync="runtimeReadinessVisible"
+      :prob-insts="probInsts"
+      :alg-infos="algInfos"
+      @open-wizard="openWizardFromReadiness"
     />
   </div>
 
@@ -555,13 +573,23 @@ import {
   updateExePlanById
 } from "@/api/exphlp/exePlanMgr";
 import ExecutionWizard from "@/views/planManage/components/ExecutionWizard";
+import RuntimeReadinessDialog from "@/views/planManage/components/RuntimeReadinessDialog";
+import PlanListHeader from "@/views/planManage/components/PlanListHeader";
 import { planResultMethods } from "@/views/planManage/modules/planResultMethods";
 import { planLogMethods } from "@/views/planManage/modules/planLogMethods";
 import { planExecutionMethods } from "@/views/planManage/modules/planExecutionMethods";
 import { planDeleteMethods } from "@/views/planManage/modules/planDeleteMethods";
+import {
+  formatTimestampToDateTime as formatTs,
+  getCurrentDateTime as getNowText,
+  buildProbInstsTreeData as buildTreeData,
+  getCheckedProbInstIds,
+  handleSameAlgName as buildAlgDisplayNames,
+  hasDuplicateParas as hasDuplicateParasInPlan,
+} from "@/views/planManage/modules/planUiHelpers";
 
 export default {
-  components: { ExecutionWizard },
+  components: { ExecutionWizard, RuntimeReadinessDialog, PlanListHeader },
   data() {
     return {
       probInsts: [],
@@ -645,6 +673,7 @@ export default {
       planLogScope: "latest",
       planLogExecutionId: "",
       planLogTimer: null,
+      planLogExpandedCells: {},
       notificationLogs: [],
       notificationTotal: 0,
       notificationLoading: false,
@@ -674,6 +703,7 @@ export default {
       treeData: [],
       duplicateParaFlag : false,
       wizardVisible: false,
+      runtimeReadinessVisible: false,
     }
   },
   created() {
@@ -718,10 +748,14 @@ export default {
       });
     },
     next() {
-      if (this.active++ > 2) this.active = 1;
+      if (this.active < 2) {
+        this.active += 1;
+      }
     },
     prev() {
-      if (this.active-- < 0) this.active = 3;
+      if (this.active > 1) {
+        this.active -= 1;
+      }
     },
     addAlgInfo() {
       // for (var i = 0; i < this.exePlan.algRunInfos.length; i++) {
@@ -986,6 +1020,7 @@ export default {
       this.planLogAfterSeq = 0;
       this.planLogExecutionId = "";
       this.planLogScope = "latest";
+      this.planLogExpandedCells = {};
       this.notificationLogs = [];
       this.notificationTotal = 0;
       this.exeResultsTable = [];
@@ -1082,11 +1117,69 @@ export default {
     downloadTextFile(filename, content, mimeType) {
       return planLogMethods.downloadTextFile.call(this, filename, content, mimeType);
     },
+    planLogLevelTagType(level) {
+      if (level === "ERROR") {
+        return "danger";
+      }
+      if (level === "WARN") {
+        return "warning";
+      }
+      if (level === "INFO") {
+        return "success";
+      }
+      return "info";
+    },
+    planLogRowClassName({ row }) {
+      if (row.level === "ERROR" || row.stage === "PLAN_FAIL" || row.stage === "ALG_FAIL") {
+        return "plan-log-row-error";
+      }
+      if (row.level === "WARN") {
+        return "plan-log-row-warn";
+      }
+      return "";
+    },
+    getPlanLogCellKey(row, field) {
+      const seq = row && row.seq ? row.seq : "x";
+      return `${seq}-${field}`;
+    },
+    isPlanLogExpanded(row, field) {
+      const key = this.getPlanLogCellKey(row, field);
+      return this.planLogExpandedCells[key] === true;
+    },
+    togglePlanLogExpanded(row, field) {
+      const key = this.getPlanLogCellKey(row, field);
+      this.$set(this.planLogExpandedCells, key, !this.planLogExpandedCells[key]);
+    },
+    resolveAlgNameByLog(row) {
+      const fromRow = row && (row.algName || row.showedAlgName);
+      if (fromRow) {
+        return fromRow;
+      }
+      const algId = row && row.algId;
+      if (!algId) {
+        return "未关联算法";
+      }
+      const matched = (this.algInfos || []).find((item) => item.algId === algId);
+      return matched && matched.algName ? matched.algName : "未知算法";
+    },
+    resolveProbInstNameByLog(row) {
+      const fromRow = row && row.probInstName;
+      if (fromRow) {
+        return fromRow;
+      }
+      const probInstId = row && row.probInstId;
+      if (!probInstId) {
+        return "未关联问题实例";
+      }
+      const matched = (this.probInsts || []).find((item) => item.instId === probInstId);
+      return matched && matched.instName ? matched.instName : "未知问题实例";
+    },
     backFromView() {
       this.stopPlanLogPolling();
       this.dialogPlanLogsVisible = false;
       this.planLogExecutionId = "";
       this.planLogScope = "latest";
+      this.planLogExpandedCells = {};
       this.notificationLogs = [];
       this.notificationTotal = 0;
       this.viewVisible = false;
@@ -1175,8 +1268,19 @@ export default {
     doExePlan(scope) {
       return planExecutionMethods.doExePlan.call(this, scope);
     },
+    onSearchUpdate(nextSearch) {
+      this.search = { ...nextSearch };
+    },
+    onSearchQuery() {
+      this.pageHelper.currentPageNum = 1;
+      this.searchByCondition();
+    },
     reExecutePlan(scope) {
       return planExecutionMethods.reExecutePlan.call(this, scope);
+    },
+    openWizardFromReadiness() {
+      this.runtimeReadinessVisible = false;
+      this.wizardVisible = true;
     },
     executePlan(scope, isRetry) {
       return planExecutionMethods.executePlan.call(this, scope, isRetry);
@@ -1188,104 +1292,34 @@ export default {
       return planExecutionMethods.runPreCheckFromLogs.call(this);
     },
     formatTimestampToDateTime(timestamp) {
-      const dateObject = new Date(timestamp);
-      const options = {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      };
-      const formattedDate = new Intl.DateTimeFormat('zh-CN', options).format(dateObject);
-      return formattedDate.replace(/\//g, '-');
+      return formatTs(timestamp);
     },
     getCurrentDateTime() {
-      const currentDateTime = new Date();
-      const options = {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false, // 24小时制
-      };
-      return new Intl.DateTimeFormat('zh-CN', options).format(currentDateTime).replace(/\//g, '-');
+      return getNowText();
     },
     buildProbInstsTreeData(probInsts) {
-      var categoryNames = [];
-      var treeData = [];
-      for (var i = 0; i < probInsts.length; i++) {
-        categoryNames.push(probInsts[i].categoryName);
-      }
-      categoryNames = categoryNames.filter((value, index, self) => {
-        return self.indexOf(value) === index;
-      });
-      for (var i = 0; i < categoryNames.length; i++) {
-        treeData.push({'id': categoryNames[i], 'label': categoryNames[i], 'children': []});
-      }
-      for (var i = 0; i < probInsts.length; i++) {
-        var index = categoryNames.indexOf(probInsts[i].categoryName);
-        treeData[index].children.push({'id': probInsts[i].instId, 'label': probInsts[i].instName})
-      }
-      return treeData;
+      return buildTreeData(probInsts);
     },
     getCheckedNodes() {
-      var selectedProbInsts = this.$refs.tree.getCheckedNodes();
-      var probInstIds = [];
-      for (var i = 0; i < selectedProbInsts.length; i++) {
-        if (selectedProbInsts[i].children == null) {
-          probInstIds.push(selectedProbInsts[i].id);
-        }
-      }
-      return probInstIds;
+      return getCheckedProbInstIds(this.$refs.tree);
     },
     handleSameAlgName(algRunInfos) {
-      var algIds = {};
-      var algNames = [];
-      for (var i = 0; i < algRunInfos.length; i++) {
-        if (!algIds.hasOwnProperty(algRunInfos[i].algId)) {
-          algIds[algRunInfos[i].algId] = [];
-        }
-        algIds[algRunInfos[i].algId].push(i);
-      }
-      for (var key in algIds) {
-        if (algIds.hasOwnProperty(key)) {
-          if (algIds[key].length > 1) {
-            for (var i = 0; i < algIds[key].length; i++) {
-              algNames[algIds[key][i]] = algRunInfos[algIds[key][i]].algName + '-' + (i + 1);
-            }
-          } else {
-            algNames[algIds[key]] = algRunInfos[algIds[key]].algName;
-          }
-        }
-      }
-      return algNames;
+      return buildAlgDisplayNames(algRunInfos);
     },
     hasDuplicateParas() {
-      var arr = [];
-      for (var i = 0; i < this.exePlan.algRunInfos.length; i++) {
-        arr.push({'runParas':this.exePlan.algRunInfos[i].runParas, 'algName':this.exePlan.algRunInfos[i].algName});
-      }
-      const seen = new Set();
-      for (const obj of arr) {
-        const objString = JSON.stringify(obj);
-        if (seen.has(objString)) {
-          this.duplicateParaFlag = true;
-          return true;
-        }
-        seen.add(objString);
-      }
-      this.duplicateParaFlag = false;
-      return false;
+      const duplicated = hasDuplicateParasInPlan(this.exePlan.algRunInfos);
+      this.duplicateParaFlag = duplicated;
+      return duplicated;
     },
   }
 }
 </script>
 
 <style scoped lang="scss">
+.plan-manage-page {
+  color: #303133;
+}
+
 .el-aside {
   background-color: white;
   text-align: center;
@@ -1296,11 +1330,284 @@ export default {
   border: solid 1px #eee;
 }
 
-.action-group-right {
+.plan-edit-container {
+  height: 720px;
+  border: 1px solid #eee;
+}
+
+.plan-edit-aside {
+  background: #fff;
+  border-right: 1px solid #f0f2f5;
+}
+
+.plan-edit-aside-body {
+  padding: 28px 18px 18px 18px;
+}
+
+.plan-edit-main {
+  text-align: left;
+  padding: 16px;
+  background: #fff;
+}
+
+.plan-edit-form {
+  margin-top: 6px;
+}
+
+.plan-edit-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+  text-align: left;
+  line-height: 1.6;
+}
+
+.right-card {
+  padding: 8px 0 4px 0;
+}
+
+.step-nav {
+  margin-top: 8px;
+}
+
+.submit-row {
+  margin-top: 14px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
 
+.alg-select-row {
+  margin-top: 4px;
+}
+
+.plan-list-container {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-list-header {
+  height: auto !important;
+  padding: 16px 16px 8px 16px;
+}
+
+.plan-list-main {
+  border-top: 1px solid #f2f6fc;
+  padding-top: 14px;
+  width: 100%;
+}
+
+.plan-list-table ::v-deep .el-table th {
+  background: #f8fafc;
+  color: #4a5568;
+  font-weight: 600;
+}
+
+.plan-list-table ::v-deep .el-table td,
+.plan-list-table ::v-deep .el-table th {
+  padding: 9px 0;
+}
+
+.plan-list-table {
+  width: 100%;
+}
+
+.plan-view-container {
+  height: 720px;
+  border: 1px solid #eee;
+}
+
+.plan-view-aside {
+  background-color: #fff;
+  text-align: left;
+}
+
+.plan-view-aside-body {
+  padding: 28px 20px 16px 20px;
+}
+
+.plan-view-main {
+  text-align: left;
+  padding: 20px;
+}
+
+.plan-view-form ::v-deep .el-form-item {
+  margin-bottom: 14px;
+}
+
+.plan-view-state-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 14px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.state-label {
+  color: #606266;
+  font-size: 13px;
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 12px;
+}
+
+.panel-subtitle {
+  margin-top: -6px;
+  margin-bottom: 10px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.panel-gap {
+  margin-top: 20px;
+}
+
+.view-action-row {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.view-section-card {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 14px 14px 10px 14px;
+  background: #fff;
+}
+
+.view-table ::v-deep .el-table__header th {
+  background: #f7f9fc;
+  color: #4a5568;
+}
+
+::v-deep .plan-logs-dialog .el-dialog__body {
+  max-height: 75vh;
+  overflow-y: auto;
+  padding-top: 10px;
+}
+
+.log-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: #fff;
+  padding: 6px 0 10px 0;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.log-toolbar-left {
+  display: flex;
+  align-items: center;
+}
+
+.log-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.log-table ::v-deep .el-table__header-wrapper th {
+  background: #f8fafc;
+}
+
+.log-table ::v-deep .plan-log-row-error > td {
+  background: #fff1f0 !important;
+}
+
+.log-table ::v-deep .plan-log-row-warn > td {
+  background: #fffbe6 !important;
+}
+
+.log-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.log-cell-content {
+  max-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.log-cell-content.expanded {
+  max-height: none;
+  white-space: normal;
+  line-height: 1.5;
+}
+
+.log-expand-btn {
+  padding: 0;
+  margin-top: 2px;
+}
+
+.notify-section {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.notify-alert {
+  margin-bottom: 8px;
+}
+
+.notify-toolbar {
+  margin-top: 8px;
+  text-align: right;
+}
+
+.notify-count {
+  margin-left: 12px;
+  color: #909399;
+}
+
+.log-footer-actions {
+  margin-top: 12px;
+  text-align: right;
+}
+
+.log-plan-state {
+  margin-left: 10px;
+}
+
+@media (max-width: 1400px) {
+  .plan-list-container {
+    border-radius: 6px;
+  }
+
+  .plan-view-aside-body {
+    padding: 18px 14px 12px 14px;
+  }
+
+  .plan-view-main {
+    padding: 12px;
+  }
+
+  .view-section-card {
+    padding: 10px;
+  }
+
+  .log-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
 
 </style>
