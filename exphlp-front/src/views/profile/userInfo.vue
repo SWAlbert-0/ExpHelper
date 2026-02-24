@@ -68,6 +68,7 @@ export default {
         if (valid) {
           updateProfile(this.user).then(response => {
             this.msgSuccess("修改成功");
+            this.$emit("profile-updated");
           });
         }
       });

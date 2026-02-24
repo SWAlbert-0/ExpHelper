@@ -3,9 +3,8 @@ package fjnu.edu.alglibmgr.dao;
 import fjnu.edu.alglibmgr.entity.DefPara ;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
 import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
-import com.mongodb.client.result.DeleteResult;
+import fjnu.edu.common.utils.mongo.MongoIdCompatSupport;
 
-import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -113,7 +112,7 @@ public class AlgLibMgrDao {
 
     //通过Id删除算法
     public AlgDeleteResult deleteAlgInfoById(String algId){
-        String normalizedId = algId == null ? "" : algId.trim();
+        String normalizedId = MongoIdCompatSupport.normalizeId(algId);
         AlgDeleteResult deleteResult = new AlgDeleteResult();
         if (!StringUtils.hasText(normalizedId)) {
             deleteResult.setDeletedCount(0L);
@@ -125,6 +124,7 @@ public class AlgLibMgrDao {
         long deletedCount = 0L;
         boolean repaired = false;
 
+        // 兼容历史脏数据：业务主键可能落在 _id 或 algId，且 _id 可能是 string/ObjectId。
         // 1) 优先按字符串 _id 删除（兼容历史 string _id）
         deletedCount += deleteByRawField("_id", normalizedId);
         if (deletedCount <= 0 && ObjectId.isValid(normalizedId)) {
@@ -191,38 +191,22 @@ public class AlgLibMgrDao {
     }
 
     private Criteria buildIdCriteria(String id) {
-        Criteria stringIdCriteria = Criteria.where("_id").is(id);
-        if (ObjectId.isValid(id)) {
-            return new Criteria().orOperator(
-                    stringIdCriteria,
-                    Criteria.where("_id").is(new ObjectId(id))
-            );
-        }
-        return stringIdCriteria;
+        return MongoIdCompatSupport.buildStringOrObjectIdCriteria("_id", id);
     }
 
     private long deleteByRawField(String field, Object value) {
-        if (!StringUtils.hasText(field) || value == null) {
-            return 0L;
-        }
-        DeleteResult deleteResult = mongoTemplate.getCollection("algLibMgr")
-                .deleteMany(new Document(field, value));
-        return deleteResult == null ? 0L : deleteResult.getDeletedCount();
+        return MongoIdCompatSupport.deleteByRawField(mongoTemplate, "algLibMgr", field, value);
     }
 
     private long deleteByQuery(Criteria criteria) {
-        if (criteria == null) {
-            return 0L;
-        }
-        DeleteResult deleteResult = mongoTemplate.remove(new Query(criteria), AlgInfo.class, "algLibMgr");
-        return deleteResult == null ? 0L : deleteResult.getDeletedCount();
+        return MongoIdCompatSupport.deleteByCriteria(mongoTemplate, "algLibMgr", AlgInfo.class, criteria);
     }
 
     private boolean existsByAnyKnownId(String id) {
         if (!StringUtils.hasText(id)) {
             return false;
         }
-        if (mongoTemplate.exists(new Query(buildIdCriteria(id)), AlgInfo.class, "algLibMgr")) {
+        if (MongoIdCompatSupport.existsByCriteria(mongoTemplate, "algLibMgr", AlgInfo.class, buildIdCriteria(id))) {
             return true;
         }
         if (existsByRawField("_id", id)) {
@@ -235,12 +219,7 @@ public class AlgLibMgrDao {
     }
 
     private boolean existsByRawField(String field, Object value) {
-        if (!StringUtils.hasText(field) || value == null) {
-            return false;
-        }
-        long count = mongoTemplate.getCollection("algLibMgr")
-                .countDocuments(new Document(field, value));
-        return count > 0;
+        return MongoIdCompatSupport.existsByRawField(mongoTemplate, "algLibMgr", field, value);
     }
 
 }

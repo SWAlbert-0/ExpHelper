@@ -5,6 +5,7 @@ import fjnu.edu.exePlanMgr.Constant.Constant;
 import fjnu.edu.exePlanMgr.entity.ExePlanLog;
 import fjnu.edu.exePlanMgr.entity.ExePlan;
 import fjnu.edu.exePlanMgr.entity.ExePlanDeleteResult;
+import fjnu.edu.common.utils.mongo.MongoIdCompatSupport;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -106,7 +107,8 @@ public class ExePlanMgrDao {
     //通过执行计划ID删除指定的执行计划
     public ExePlanDeleteResult deleteExePlanById(String planId) {
         ExePlanDeleteResult result = new ExePlanDeleteResult();
-        if (!StringUtils.hasText(planId)) {
+        String normalizedPlanId = MongoIdCompatSupport.normalizeId(planId);
+        if (!StringUtils.hasText(normalizedPlanId)) {
             result.setDeletedCount(0L);
             result.setExisted(false);
             result.setNoop(true);
@@ -114,7 +116,7 @@ public class ExePlanMgrDao {
             result.setBlocked(false);
             return result;
         }
-        ExePlan exeplan = getExePlanById(planId);
+        ExePlan exeplan = getExePlanById(normalizedPlanId);
         if (exeplan == null) {
             result.setDeletedCount(0L);
             result.setExisted(false);
@@ -132,14 +134,15 @@ public class ExePlanMgrDao {
             return result;
         }
         long deletedCount = 0L;
-        deletedCount += deleteByRawStringField("_id", planId);
-        deletedCount += deleteByRawStringField("planId", planId);
-        if (ObjectId.isValid(planId)) {
-            ObjectId objectId = new ObjectId(planId);
+        // 兼容历史数据：_id / planId 可能是 string 或 ObjectId，多路径兜底删除。
+        deletedCount += deleteByRawStringField("_id", normalizedPlanId);
+        deletedCount += deleteByRawStringField("planId", normalizedPlanId);
+        if (ObjectId.isValid(normalizedPlanId)) {
+            ObjectId objectId = new ObjectId(normalizedPlanId);
             deletedCount += deleteByRawField("_id", objectId);
             deletedCount += deleteByRawField("planId", objectId);
         }
-        boolean stillExists = getExePlanById(planId) != null;
+        boolean stillExists = getExePlanById(normalizedPlanId) != null;
         result.setDeletedCount(deletedCount);
         result.setExisted(true);
         result.setNoop(deletedCount <= 0);

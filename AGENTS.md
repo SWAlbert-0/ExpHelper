@@ -124,3 +124,11 @@ Use separate terminals for backend and frontend.
   - step-by-step operation guide (click path + expected UI states),
   - field/parameter explanation guide (meaning + recommended values + troubleshooting).
 - Any user-facing behavior change (delete result semantics, retry behavior, blocked reasons, etc.) requires matching doc updates.
+
+### 8) Repository Housekeeping Rules (Version3)
+- Keep docs layered and discoverable:
+  - `docs/user/` for end-user guides,
+  - `docs/dev/` for engineering docs,
+  - `docs/archive/` for historical materials.
+- Put temporary artifacts under `temp/` only, and never commit runtime logs/screenshots/cache snapshots.
+- When large Vue pages exceed maintainable size, extract high-change flows (execute/log/result/delete) into `modules/` and keep container page as orchestration layer.

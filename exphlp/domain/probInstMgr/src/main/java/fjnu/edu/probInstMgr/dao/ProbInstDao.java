@@ -2,8 +2,7 @@ package fjnu.edu.probInstMgr.dao;
 
 import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.probInstMgr.entity.ProbDeleteResult;
-import com.mongodb.client.result.DeleteResult;
-import org.bson.Document;
+import fjnu.edu.common.utils.mongo.MongoIdCompatSupport;
 import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -35,7 +34,7 @@ public class ProbInstDao {
             @CacheEvict(value = "probInstMgr.list", allEntries = true)
     })*/
     public ProbDeleteResult delProbInstByID(String instId) {
-        String normalizedId = instId == null ? "" : instId.trim();
+        String normalizedId = MongoIdCompatSupport.normalizeId(instId);
         ProbDeleteResult deleteResult = new ProbDeleteResult();
         if (!StringUtils.hasText(normalizedId)) {
             deleteResult.setDeletedCount(0L);
@@ -47,6 +46,7 @@ public class ProbInstDao {
         long deletedCount = 0L;
         boolean repaired = false;
 
+        // 历史数据可能混用 _id/instId/proId，且 _id 类型可能是 string/ObjectId，需按顺序兜底删除。
         // 1) 优先按字符串 _id 删除（兼容历史 string _id）
         deletedCount += deleteByRawField("_id", normalizedId);
         if (deletedCount <= 0 && ObjectId.isValid(normalizedId)) {
@@ -159,30 +159,18 @@ public class ProbInstDao {
     }
 
     private Criteria buildIdCriteria(String id) {
-        Criteria stringIdCriteria = Criteria.where("_id").is(id);
-        if (ObjectId.isValid(id)) {
-            return new Criteria().orOperator(
-                    stringIdCriteria,
-                    Criteria.where("_id").is(new ObjectId(id))
-            );
-        }
-        return stringIdCriteria;
+        return MongoIdCompatSupport.buildStringOrObjectIdCriteria("_id", id);
     }
 
     private long deleteByRawField(String field, Object value) {
-        if (!StringUtils.hasText(field) || value == null) {
-            return 0L;
-        }
-        DeleteResult deleteResult = mongoTemplate.getCollection("probInstMgr")
-                .deleteMany(new Document(field, value));
-        return deleteResult == null ? 0L : deleteResult.getDeletedCount();
+        return MongoIdCompatSupport.deleteByRawField(mongoTemplate, "probInstMgr", field, value);
     }
 
     private boolean existsByAnyKnownId(String id) {
         if (!StringUtils.hasText(id)) {
             return false;
         }
-        if (mongoTemplate.exists(new Query(buildIdCriteria(id)), ProbInst.class, "probInstMgr")) {
+        if (MongoIdCompatSupport.existsByCriteria(mongoTemplate, "probInstMgr", ProbInst.class, buildIdCriteria(id))) {
             return true;
         }
         if (existsByRawField("_id", id)) {
@@ -195,19 +183,10 @@ public class ProbInstDao {
     }
 
     private boolean existsByRawField(String field, Object value) {
-        if (!StringUtils.hasText(field) || value == null) {
-            return false;
-        }
-        long count = mongoTemplate.getCollection("probInstMgr")
-                .countDocuments(new Document(field, value));
-        return count > 0;
+        return MongoIdCompatSupport.existsByRawField(mongoTemplate, "probInstMgr", field, value);
     }
 
     private long deleteByQuery(Criteria criteria) {
-        if (criteria == null) {
-            return 0L;
-        }
-        DeleteResult deleteResult = mongoTemplate.remove(new Query(criteria), ProbInst.class, "probInstMgr");
-        return deleteResult == null ? 0L : deleteResult.getDeletedCount();
+        return MongoIdCompatSupport.deleteByCriteria(mongoTemplate, "probInstMgr", ProbInst.class, criteria);
     }
 }

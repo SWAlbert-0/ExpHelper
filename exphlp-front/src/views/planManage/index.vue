@@ -519,16 +519,15 @@ import {getAlgs} from "@/api/exphlp/algLibMgr";
 import {getUserList} from "@/api/exphlp/platMgr";
 import {
   addExePlan, countAllExePlans,
-  deleteExePlanById, execute,
-  exportPlanLogs,
-  getPlanLogs,
-  preCheck,
   getExePlanByName,
   getExePlans,
   updateExePlanById
 } from "@/api/exphlp/exePlanMgr";
-import {getExeResult, getExeResultDetail} from "@/api/exphlp/algResultMgr";
 import ExecutionWizard from "@/views/planManage/components/ExecutionWizard";
+import { planResultMethods } from "@/views/planManage/modules/planResultMethods";
+import { planLogMethods } from "@/views/planManage/modules/planLogMethods";
+import { planExecutionMethods } from "@/views/planManage/modules/planExecutionMethods";
+import { planDeleteMethods } from "@/views/planManage/modules/planDeleteMethods";
 
 export default {
   components: { ExecutionWizard },
@@ -1006,208 +1005,37 @@ export default {
       this.dialogViewRunParasVisible = true;
     },
     showExeResults(scope) {
-      this.getExeResults(scope);
-      this.dialogViewExeResultsVisible = true;
+      return planResultMethods.showExeResults.call(this, scope);
     },
     getExeResults(scope) {
-      getExeResultDetail(this.exePlanId, scope.algId, { silentHttpErrors: [404] }).then(res => {
-        const data = res && res.data ? res.data : {};
-        this.exeResultDetail = {
-          status: data.status || "",
-          reasonCode: data.reasonCode || "",
-          message: data.message || "",
-          metricVersion: data.metricVersion || "",
-          runs: data.runs || [],
-          aggregate: data.aggregate || {},
-        };
-        this.exeResultsTable = this.exeResultDetail.runs;
-      }).catch((error) => {
-        const status = error && error.response ? error.response.status : null;
-        if (status !== 404) {
-          this.exeResultDetail = {
-            status: "MISSING",
-            reasonCode: "RESULT_FETCH_FAILED",
-            message: "执行结果读取失败",
-            metricVersion: "",
-            runs: [],
-            aggregate: {},
-          };
-          this.exeResultsTable = [];
-          return;
-        }
-        getExeResult(this.exePlanId, scope.algId, scope.algName).then((res) => {
-          const rows = Array.isArray(res) ? res : [];
-          this.exeResultsTable = rows.map((item, index) => {
-            return {
-              runIndex: index + 1,
-              probInstName: item.probInstName || "-",
-              runtimeMs: "-",
-              paretoSize: Array.isArray(item.eachResults) ? item.eachResults.length : 0,
-              hv: null,
-              igdPlus: null,
-              spreadDelta: null,
-              metricStatus: "LEGACY",
-              reasonCode: "LEGACY_ENDPOINT_FALLBACK",
-            };
-          });
-          this.exeResultDetail = {
-            status: "PARTIAL",
-            reasonCode: "LEGACY_ENDPOINT_FALLBACK",
-            message: "当前后端缺少详细结果接口，已降级展示基础结果，建议升级 webapp 镜像",
-            metricVersion: "-",
-            runs: this.exeResultsTable,
-            aggregate: { runCount: this.exeResultsTable.length },
-          };
-          this.$message({
-            type: "warning",
-            message: "执行结果接口版本较旧，已自动降级展示基础结果",
-          });
-        }).catch(() => {
-          this.exeResultDetail = {
-            status: "MISSING",
-            reasonCode: "RESULT_ENDPOINT_404",
-            message: "执行结果接口不可用，请升级后端容器",
-            metricVersion: "",
-            runs: [],
-            aggregate: {},
-          };
-          this.exeResultsTable = [];
-        });
-      });
+      return planResultMethods.getExeResults.call(this, scope);
     },
     formatMetric(value) {
-      if (value === undefined || value === null || value === "") {
-        return "-";
-      }
-      const number = Number(value);
-      if (Number.isNaN(number)) {
-        return String(value);
-      }
-      return number.toFixed(6);
+      return planResultMethods.formatMetric.call(this, value);
     },
     openPlanLogsDialog() {
-      this.dialogPlanLogsVisible = true;
-      this.planLogs = [];
-      this.planLogAfterSeq = 0;
-      this.planLogExecutionId = this.showedExePlan.executionId || "";
-      this.planLogScope = "latest";
-      this.fetchPlanLogs(true);
-      if (this.showedExePlan.exeState === "执行中") {
-        this.startPlanLogPolling();
-      }
+      return planLogMethods.openPlanLogsDialog.call(this);
     },
     closePlanLogsDialog(done) {
-      this.stopPlanLogPolling();
-      this.dialogPlanLogsVisible = false;
-      if (done) {
-        done();
-      }
+      return planLogMethods.closePlanLogsDialog.call(this, done);
     },
     startPlanLogPolling() {
-      this.stopPlanLogPolling();
-      this.planLogTimer = setInterval(() => {
-        this.fetchPlanLogs(false);
-      }, 2000);
+      return planLogMethods.startPlanLogPolling.call(this);
     },
     stopPlanLogPolling() {
-      if (this.planLogTimer) {
-        clearInterval(this.planLogTimer);
-        this.planLogTimer = null;
-      }
+      return planLogMethods.stopPlanLogPolling.call(this);
     },
     fetchPlanLogs(reset) {
-      if (!this.exePlanId) {
-        return;
-      }
-      const afterSeq = reset ? 0 : this.planLogAfterSeq;
-      getPlanLogs(this.exePlanId, afterSeq, 200, this.planLogExecutionId, this.planLogScope).then(res => {
-        const data = res && res.data ? res.data : {};
-        const items = data.items || [];
-        if (data.executionId !== undefined && data.executionId !== null) {
-          this.planLogExecutionId = data.executionId;
-        }
-        if (reset) {
-          this.planLogs = items;
-        } else if (items.length > 0) {
-          this.planLogs = this.planLogs.concat(items);
-        }
-        if (typeof data.nextSeq === "number") {
-          this.planLogAfterSeq = data.nextSeq;
-        } else if (items.length > 0) {
-          this.planLogAfterSeq = items[items.length - 1].seq;
-        }
-        if (typeof data.planState === "number") {
-          const stateIndex = data.planState - 1;
-          if (stateIndex >= 0 && stateIndex < this.options.length) {
-            this.showedExePlan.exeState = this.options[stateIndex].value;
-          }
-        }
-        if (data.lastError !== undefined) {
-          this.showedExePlan.lastError = data.lastError || "";
-        }
-        if (this.showedExePlan.exeState !== "执行中") {
-          this.stopPlanLogPolling();
-        }
-      });
+      return planLogMethods.fetchPlanLogs.call(this, reset);
     },
     switchPlanLogScope() {
-      this.planLogs = [];
-      this.planLogAfterSeq = 0;
-      this.fetchPlanLogs(true);
-      if (this.showedExePlan.exeState === "执行中" && this.planLogScope === "latest") {
-        this.startPlanLogPolling();
-      } else {
-        this.stopPlanLogPolling();
-      }
+      return planLogMethods.switchPlanLogScope.call(this);
     },
     exportPlanLogsAs(format) {
-      if (!this.exePlanId) {
-        return;
-      }
-      exportPlanLogs(this.exePlanId, this.planLogExecutionId, this.planLogScope, 10000).then(res => {
-        const data = res && res.data ? res.data : {};
-        const items = data.items || [];
-        const scope = data.scope || this.planLogScope;
-        const executionId = data.executionId || this.planLogExecutionId || "all";
-        if (format === "json") {
-          const content = JSON.stringify(items, null, 2);
-          this.downloadTextFile(`plan-logs-${this.exePlanId}-${scope}-${executionId}.json`, content, "application/json;charset=utf-8");
-          return;
-        }
-        const header = ["seq", "time", "level", "stage", "executionId", "algId", "runIndex", "probInstId", "message", "details"];
-        const lines = [header.join(",")];
-        for (let i = 0; i < items.length; i++) {
-          const row = items[i] || {};
-          const values = [
-            row.seq,
-            this.formatTimestampToDateTime(row.ts),
-            row.level,
-            row.stage,
-            row.executionId,
-            row.algId,
-            row.runIndex,
-            row.probInstId,
-            row.message,
-            row.details,
-          ].map((v) => {
-            const text = v === undefined || v === null ? "" : String(v);
-            return `"${text.replace(/"/g, '""')}"`;
-          });
-          lines.push(values.join(","));
-        }
-        this.downloadTextFile(`plan-logs-${this.exePlanId}-${scope}-${executionId}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
-      });
+      return planLogMethods.exportPlanLogsAs.call(this, format);
     },
     downloadTextFile(filename, content, mimeType) {
-      const blob = new Blob([content], { type: mimeType || "text/plain;charset=utf-8" });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      return planLogMethods.downloadTextFile.call(this, filename, content, mimeType);
     },
     backFromView() {
       this.stopPlanLogPolling();
@@ -1263,100 +1091,10 @@ export default {
       this.active = 1;
     },
     deleteExePlan(scope) {
-      if (scope.exeState == '执行中') {
-        this.$message({type: "warning", message: "计划执行中，不能删除",});
-      } else {
-        this.$confirm("此操作将永久删除执行计划记录, 是否继续?", "提示", {
-          confirmButtonText: "确定",
-          cancelButtonText: "取消",
-          type: "warning",
-        })
-          .then(() => {
-            deleteExePlanById(scope.planId).then((res) => {
-              const data = res && res.data ? res.data : {};
-              if (data.blocked) {
-                this.$message({type: "warning", message: "删除失败，计划执行中",});
-                this.getExePlans();
-                return;
-              }
-              if (data.deletedCount > 0) {
-                this.$message({type: "success", message: `删除成功（planId=${scope.planId}）`,});
-              } else if (data.noop) {
-                this.$message({type: "success", message: `记录已不存在，列表已同步（planId=${scope.planId}）`,});
-              } else {
-                this.$message({type: "warning", message: "删除未生效，请刷新后重试",});
-              }
-              this.getExePlans();
-            });
-          })
-          .catch(() => {
-            this.$message({type: "info", message: "取消删除",});
-          });
-      }
-
+      return planDeleteMethods.deleteExePlan.call(this, scope);
     },
     deleteBatchExePlan() {
-      if (this.multipleSelection1.length == 0) {
-        this.$message({
-          type: "warning",
-          message: "当前未选中任何执行计划",
-        });
-      } else {
-        var flag = true;
-        for (var i = 0; i < this.multipleSelection1.length; i++) {
-          if (this.multipleSelection1[i].exeState == '执行中') {
-            flag = false;
-            break;
-          }
-        }
-        if (!flag) {
-          this.$message({type: "warning", message: "存在执行中的执行计划，请重新选择",});
-        } else {
-          this.$confirm("此操作将永久删除执行计划记录, 是否继续?", "提示", {
-            confirmButtonText: "确定",
-            cancelButtonText: "取消",
-            type: "warning",
-          })
-            .then(() => {
-              const deleteTasks = this.multipleSelection1.map((item) => deleteExePlanById(item.planId));
-              Promise.allSettled(deleteTasks).then((results) => {
-                let deletedCount = 0;
-                let noopCount = 0;
-                let blockedCount = 0;
-                let failedCount = 0;
-                for (let i = 0; i < results.length; i++) {
-                  const result = results[i];
-                  if (result.status !== "fulfilled") {
-                    failedCount += 1;
-                    continue;
-                  }
-                  const data = result.value && result.value.data ? result.value.data : {};
-                  if (data.blocked) {
-                    blockedCount += 1;
-                  } else if (Number(data.deletedCount) > 0) {
-                    deletedCount += 1;
-                  } else if (data.noop) {
-                    noopCount += 1;
-                  } else {
-                    failedCount += 1;
-                  }
-                }
-                if (failedCount === 0 && blockedCount === 0) {
-                  this.$message({type: "success", message: `删除完成：成功删除 ${deletedCount} 条，同步不存在 ${noopCount} 条`,});
-                } else {
-                  this.$message({type: "warning", message: `批量删除完成：删除 ${deletedCount} 条，同步不存在 ${noopCount} 条，执行中阻止 ${blockedCount} 条，失败 ${failedCount} 条`,});
-                }
-                this.getExePlans();
-              });
-            })
-            .catch(() => {
-              this.$message({
-                type: "info",
-                message: "取消删除",
-              });
-            });
-        }
-      }
+      return planDeleteMethods.deleteBatchExePlan.call(this);
     },
     backToExePlanTable() {
       this.algId = '';
@@ -1388,88 +1126,19 @@ export default {
       });
     },
     doExePlan(scope) {
-      if (scope.exeState !== '未执行') {
-        return;
-      }
-      this.executePlan(scope, false);
+      return planExecutionMethods.doExePlan.call(this, scope);
     },
     reExecutePlan(scope) {
-      if (scope.exeState !== '异常结束') {
-        return;
-      }
-      this.$confirm("重新执行将覆盖当前计划的同名结果展示，是否继续?", "提示", {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }).then(() => {
-        this.executePlan(scope, true);
-      }).catch(() => {
-        this.$message({type: "info", message: "已取消重新执行",});
-      });
+      return planExecutionMethods.reExecutePlan.call(this, scope);
     },
     executePlan(scope, isRetry) {
-      preCheck(scope.planId).then(() => {
-        return execute(scope.planId);
-      }).then(res => {
-        const data = res && res.data ? res.data : {};
-        if (data.accepted) {
-          scope.exeState = '执行中';
-          scope.lastError = "";
-          this.$message({type: "success", message: isRetry ? "计划重新执行中" : "计划执行中",});
-          if (this.showedExePlan.planId && this.showedExePlan.planId === scope.planId) {
-            this.showedExePlan.exeState = "执行中";
-            this.showedExePlan.lastError = "";
-          }
-        } else {
-          const reason = data.lastError ? ("，原因: " + data.lastError) : "";
-          const msg = ((res && res.msg) ? res.msg : (isRetry ? "计划重新执行失败" : "计划执行失败")) + reason;
-          this.$message({type: "warning", message: msg,});
-        }
-        this.getExePlans();
-      }).catch((error) => {
-        const check = error && error.response && error.response.data ? error.response.data : null;
-        if (check && (check.errorCode === "ALG_SERVICE_NO_INSTANCE" || check.errorCode === "ALG_SERVICE_NAME_EMPTY" || check.errorCode === "NACOS_UNREACHABLE")) {
-          this.showPreCheckFailure(check);
-          this.getExePlans();
-          return;
-        }
-        this.$message({
-          type: "error",
-          message: isRetry ? "计划重新执行失败，请稍后重试" : "计划执行失败，请稍后重试",
-        });
-      });
+      return planExecutionMethods.executePlan.call(this, scope, isRetry);
     },
     showPreCheckFailure(resp) {
-      const data = resp && resp.data ? resp.data : {};
-      const items = data && data.items ? data.items : [];
-      const first = items.length > 0 ? items[0] : null;
-      const msg = data && data.message ? data.message : "执行前检查失败";
-      const suggestion = first && first.suggestion ? first.suggestion : "";
-      const diagnosis = first && first.diagnosis ? first.diagnosis : "";
-      const code = resp && resp.errorCode ? resp.errorCode : "";
-      const quickStart = (code === "ALG_SERVICE_NO_INSTANCE" || code === "NACOS_UNREACHABLE")
-        ? "可先执行：powershell -ExecutionPolicy Bypass -File docs/examples/moo-nsga2-zdt1/scripts/start-alg-with-nacos.ps1"
-        : "";
-      const detail = [msg, diagnosis, suggestion, quickStart].filter(Boolean).join("；");
-      this.$alert(detail, "执行前检查未通过", {
-        confirmButtonText: "知道了",
-        type: "warning",
-      });
+      return planExecutionMethods.showPreCheckFailure.call(this, resp);
     },
     runPreCheckFromLogs() {
-      if (!this.showedExePlan || !this.showedExePlan.planId) {
-        return;
-      }
-      preCheck(this.showedExePlan.planId).then(() => {
-        this.$message({ type: "success", message: "执行前检查通过" });
-      }).catch((error) => {
-        const payload = error && error.response && error.response.data ? error.response.data : null;
-        if (payload) {
-          this.showPreCheckFailure(payload);
-          return;
-        }
-        this.$message({ type: "error", message: "执行前检查失败" });
-      });
+      return planExecutionMethods.runPreCheckFromLogs.call(this);
     },
     formatTimestampToDateTime(timestamp) {
       const dateObject = new Date(timestamp);

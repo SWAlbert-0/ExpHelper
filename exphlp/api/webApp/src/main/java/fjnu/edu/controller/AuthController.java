@@ -135,18 +135,22 @@ public class AuthController {
         String qq = stringValue(payload.get("qq"));
 
         if (!StringUtils.hasText(userName)) {
+            log.warn("traceId={} userId={} path={} errorCode={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/profile", ErrorCode.USER_NAME_REQUIRED.code());
             return ApiResponse.failed(request, 400, "用户名不能为空", ErrorCode.USER_NAME_REQUIRED.code());
         }
         String emailMsg = UserFieldValidator.validateEmail(email);
         if (emailMsg != null) {
+            log.warn("traceId={} userId={} path={} errorCode={} reason={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/profile", ErrorCode.USER_EMAIL_INVALID.code(), emailMsg);
             return ApiResponse.failed(request, 400, emailMsg, ErrorCode.USER_EMAIL_INVALID.code());
         }
         String mobileMsg = UserFieldValidator.validateMobile(mobile);
         if (mobileMsg != null) {
+            log.warn("traceId={} userId={} path={} errorCode={} reason={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/profile", ErrorCode.USER_MOBILE_INVALID.code(), mobileMsg);
             return ApiResponse.failed(request, 400, mobileMsg, ErrorCode.USER_MOBILE_INVALID.code());
         }
         String qqMsg = UserFieldValidator.validateQq(qq);
         if (qqMsg != null) {
+            log.warn("traceId={} userId={} path={} errorCode={} reason={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/profile", ErrorCode.USER_QQ_INVALID.code(), qqMsg);
             return ApiResponse.failed(request, 400, qqMsg, ErrorCode.USER_QQ_INVALID.code());
         }
         userInfo.setUserName(userName.trim());
@@ -168,12 +172,15 @@ public class AuthController {
         String oldPassword = stringValue(payload.get("oldPassword"));
         String newPassword = stringValue(payload.get("newPassword"));
         if (!StringUtils.hasText(oldPassword) || !StringUtils.hasText(newPassword)) {
+            log.warn("traceId={} userId={} path={} errorCode={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/password", ErrorCode.PASSWORD_EMPTY.code());
             return ApiResponse.failed(request, 400, "旧密码和新密码不能为空", ErrorCode.PASSWORD_EMPTY.code());
         }
         if (newPassword.length() < 6 || newPassword.length() > 50) {
+            log.warn("traceId={} userId={} path={} errorCode={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/password", ErrorCode.PASSWORD_LENGTH_INVALID.code());
             return ApiResponse.failed(request, 400, "新密码长度需在6到50之间", ErrorCode.PASSWORD_LENGTH_INVALID.code());
         }
         if (!passwordService.matches(oldPassword, userInfo.getPassword())) {
+            log.warn("traceId={} userId={} path={} errorCode={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/password", ErrorCode.PASSWORD_OLD_INVALID.code());
             return ApiResponse.failed(request, 401, "旧密码错误", ErrorCode.PASSWORD_OLD_INVALID.code());
         }
         userInfo.setPassword(passwordService.encode(newPassword));

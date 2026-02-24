@@ -7,6 +7,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.util.StringUtils;
 
 /**
  * @ClassName EmailService
@@ -29,17 +30,25 @@ public class EmailService {
      * @param subject 邮件主题
      * @param text    纯文本内容
      */
-    public void sendMail(String to, String subject, String text) {
+    public MailSendResult sendMail(String to, String subject, String text) {
         if (javaMailSender == null) {
             log.warn("Skip email notification because JavaMailSender is not configured. to={}, subject={}", to, subject);
-            return;
+            return MailSendResult.notConfigured("JavaMailSender未配置");
         }
-        SimpleMailMessage message = new SimpleMailMessage();
-
-        message.setFrom(from);
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(text);
-        javaMailSender.send(message);
+        if (!StringUtils.hasText(to)) {
+            return MailSendResult.failed("收件人邮箱为空");
+        }
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(from);
+            message.setTo(to);
+            message.setSubject(subject);
+            message.setText(text);
+            javaMailSender.send(message);
+            return MailSendResult.sent();
+        } catch (Exception ex) {
+            log.warn("Send email failed. to={}, subject={}, reason={}", to, subject, ex.getMessage());
+            return MailSendResult.failed(ex.getMessage() == null ? "邮件发送失败" : ex.getMessage());
+        }
     }
 }

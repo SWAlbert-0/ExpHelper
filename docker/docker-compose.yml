@@ -75,6 +75,11 @@ services:
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-123456}
       NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
       SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:-}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:-}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-in-dev}
       AUTH_JWT_EXPIRE_SECONDS: ${AUTH_JWT_EXPIRE_SECONDS:-86400}
       ALG_CALL_CONNECT_TIMEOUT_MS: ${ALG_CALL_CONNECT_TIMEOUT_MS:-3000}
@@ -99,6 +104,25 @@ services:
       - webapp
     ports:
       - "${FRONT_PORT:-8086}:80"
+
+  nsga2_zdt1_example:
+    build:
+      context: ../docs/examples/moo-nsga2-zdt1/algorithm_service
+      dockerfile: Dockerfile
+    image: nsga2-zdt1-example:local
+    container_name: c_nsga2_zdt1_example
+    restart: always
+    depends_on:
+      nacos:
+        condition: service_started
+    ports:
+      - "${NSGA2_EXAMPLE_PORT:-18082}:18082"
+    environment:
+      ALG_PORT: 18082
+      ALG_SERVICE_NAME: ${NSGA2_EXAMPLE_SERVICE_NAME:-nsga2-zdt1-ls}
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_GROUP: ${NACOS_GROUP:-DEFAULT_GROUP}
 
 volumes:
   mongo-data:

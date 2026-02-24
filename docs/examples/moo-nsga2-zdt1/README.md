@@ -4,6 +4,7 @@
 
 ## 文档入口
 
+- 平台用户快速上手：`docs/user/快速上手-从部署到执行.md`
 - 操作步骤文档：`docs/网页操作步骤.md`
 - 说明文档（字段含义/填写建议/异常处理）：`docs/字段与参数说明.md`
 - 算法说明：`docs/algorithm-notes.md`
@@ -20,6 +21,7 @@
 - `papers/`：论文 PDF 与引用信息
 - `problem_instances/`：问题实例样例与问题定义
 - `algorithm_service/`：可运行 Java 算法服务（服务名 `nsga2-zdt1-ls`）
+  - `Dockerfile`：用于通过 docker compose 启动并注册到 Nacos
 - `scripts/`：辅助脚本
   - `start-alg-with-nacos.ps1`：一键启动算法服务并等待注册到 Nacos（推荐）
   - `check-nacos-readiness.ps1`：一键检查 Nacos/算法服务可用性
@@ -37,6 +39,12 @@ powershell -ExecutionPolicy Bypass -File docs/examples/moo-nsga2-zdt1/scripts/st
 ```
 
 若脚本返回成功，即表示服务 `nsga2-zdt1-ls` 已注册到 Nacos，可直接在网页继续操作。
+
+也可直接走容器方式（推荐给平台使用者）：
+
+```powershell
+docker compose --env-file docker/.env -f docker/docker-compose.yml up -d --build nsga2_zdt1_example
+```
 
 ## 常见问题（本次版本新增）
 

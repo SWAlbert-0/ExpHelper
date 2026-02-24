@@ -57,7 +57,11 @@ export default {
         if (valid) {
           updatePassword(this.user.oldPassword, this.user.newPassword).then(
             response => {
-              this.msgSuccess("修改成功");
+              this.msgSuccess("修改成功，建议重新登录后继续操作");
+              this.user.oldPassword = undefined;
+              this.user.newPassword = undefined;
+              this.user.confirmPassword = undefined;
+              this.$refs["form"].clearValidate();
             }
           );
         }
