@@ -487,6 +487,37 @@
               <el-table-column property="message" label="内容" min-width="260"></el-table-column>
               <el-table-column property="details" label="详情" min-width="180" show-overflow-tooltip></el-table-column>
             </el-table>
+            <div style="margin-top: 12px; text-align: left;">
+              <el-divider content-position="left">通知记录</el-divider>
+              <el-table :data="notificationLogs" border fit height="220" v-loading="notificationLoading">
+                <el-table-column property="createdAt" label="创建时间" width="180" align="center">
+                  <template slot-scope="scope">
+                    {{ formatTimestampToDateTime(scope.row.createdAt) }}
+                  </template>
+                </el-table-column>
+                <el-table-column property="userId" label="用户ID" width="150" show-overflow-tooltip></el-table-column>
+                <el-table-column property="toEmail" label="邮箱" min-width="180" show-overflow-tooltip></el-table-column>
+                <el-table-column property="status" label="状态" width="130" align="center"></el-table-column>
+                <el-table-column property="retryCount" label="重试" width="80" align="center"></el-table-column>
+                <el-table-column property="lastErrorCode" label="原因码" width="170" show-overflow-tooltip></el-table-column>
+                <el-table-column property="lastErrorMsg" label="原因" min-width="180" show-overflow-tooltip></el-table-column>
+                <el-table-column label="操作" width="120" align="center">
+                  <template slot-scope="scope">
+                    <el-button
+                      size="mini"
+                      type="warning"
+                      :disabled="scope.row.status !== 'FAILED_FINAL' && scope.row.status !== 'FAILED_RETRY'"
+                      @click="resendOneNotification(scope.row)"
+                    >补发</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div style="margin-top: 8px; text-align: right;">
+                <el-button size="mini" icon="el-icon-refresh" @click="fetchNotificationLogs">刷新通知记录</el-button>
+                <el-button size="mini" type="warning" @click="resendFailedByExecution">补发本批次失败通知</el-button>
+                <span style="margin-left: 12px; color: #909399;">共 {{ notificationTotal }} 条</span>
+              </div>
+            </div>
             <div style="margin-top: 12px; text-align: right;">
               <el-button size="mini" type="primary" @click="runPreCheckFromLogs">执行前检查</el-button>
               <el-button
@@ -614,6 +645,9 @@ export default {
       planLogScope: "latest",
       planLogExecutionId: "",
       planLogTimer: null,
+      notificationLogs: [],
+      notificationTotal: 0,
+      notificationLoading: false,
       showedExePlan: {
         planName: '',
         probInsts: [],
@@ -952,6 +986,8 @@ export default {
       this.planLogAfterSeq = 0;
       this.planLogExecutionId = "";
       this.planLogScope = "latest";
+      this.notificationLogs = [];
+      this.notificationTotal = 0;
       this.exeResultsTable = [];
       this.exeResultDetail = {
         status: "",
@@ -1031,6 +1067,15 @@ export default {
     switchPlanLogScope() {
       return planLogMethods.switchPlanLogScope.call(this);
     },
+    fetchNotificationLogs() {
+      return planLogMethods.fetchNotificationLogs.call(this);
+    },
+    resendOneNotification(row) {
+      return planLogMethods.resendOneNotification.call(this, row);
+    },
+    resendFailedByExecution() {
+      return planLogMethods.resendFailedByExecution.call(this);
+    },
     exportPlanLogsAs(format) {
       return planLogMethods.exportPlanLogsAs.call(this, format);
     },
@@ -1042,6 +1087,8 @@ export default {
       this.dialogPlanLogsVisible = false;
       this.planLogExecutionId = "";
       this.planLogScope = "latest";
+      this.notificationLogs = [];
+      this.notificationTotal = 0;
       this.viewVisible = false;
       this.showExePlanTableVisible = true;
     },

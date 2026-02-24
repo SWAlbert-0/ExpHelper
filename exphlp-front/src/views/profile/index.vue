@@ -52,6 +52,9 @@
             <el-tab-pane label="修改密码" name="resetPwd">
               <resetPwd :user="user" />
             </el-tab-pane>
+            <el-tab-pane label="通知设置" name="notifySettings">
+              <notifySettings />
+            </el-tab-pane>
           </el-tabs>
         </el-card>
       </el-col>
@@ -63,11 +66,12 @@
 import userAvatar from "./userAvatar";
 import userInfo from "./userInfo";
 import resetPwd from "./resetPwd";
+import notifySettings from "./notifySettings";
 import { getProfile } from "@/api/auth";
 
 export default {
   name: "Profile",
-  components: { userAvatar, userInfo, resetPwd },
+  components: { userAvatar, userInfo, resetPwd, notifySettings },
   data() {
     return {
       user: {},

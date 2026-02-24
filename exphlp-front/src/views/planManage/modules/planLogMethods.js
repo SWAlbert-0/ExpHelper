@@ -1,4 +1,5 @@
 import { exportPlanLogs, getPlanLogs } from "@/api/exphlp/exePlanMgr";
+import { listNotifications, resendByExecution, resendNotification } from "@/api/exphlp/notification";
 
 export const planLogMethods = {
   openPlanLogsDialog() {
@@ -7,7 +8,10 @@ export const planLogMethods = {
     this.planLogAfterSeq = 0;
     this.planLogExecutionId = this.showedExePlan.executionId || "";
     this.planLogScope = "latest";
+    this.notificationLogs = [];
+    this.notificationTotal = 0;
     this.fetchPlanLogs(true);
+    this.fetchNotificationLogs();
     if (this.showedExePlan.exeState === "执行中") {
       this.startPlanLogPolling();
     }
@@ -16,6 +20,8 @@ export const planLogMethods = {
   closePlanLogsDialog(done) {
     this.stopPlanLogPolling();
     this.dialogPlanLogsVisible = false;
+    this.notificationLogs = [];
+    this.notificationTotal = 0;
     if (done) {
       done();
     }
@@ -68,6 +74,7 @@ export const planLogMethods = {
       if (this.showedExePlan.exeState !== "执行中") {
         this.stopPlanLogPolling();
       }
+      this.fetchNotificationLogs();
     });
   },
 
@@ -121,6 +128,49 @@ export const planLogMethods = {
     });
   },
 
+  fetchNotificationLogs() {
+    if (!this.exePlanId) {
+      return;
+    }
+    this.notificationLoading = true;
+    listNotifications({
+      planId: this.exePlanId,
+      executionId: this.planLogExecutionId || "",
+      pageNum: 1,
+      pageSize: 100,
+    }).then((res) => {
+      const data = (res && res.data) || {};
+      this.notificationLogs = data.items || [];
+      this.notificationTotal = data.total || 0;
+    }).finally(() => {
+      this.notificationLoading = false;
+    });
+  },
+
+  resendOneNotification(row) {
+    if (!row || !row.notificationId) {
+      return;
+    }
+    resendNotification(row.notificationId).then(() => {
+      this.$message({ type: "success", message: "补发任务已创建" });
+      this.fetchNotificationLogs();
+      this.fetchPlanLogs(true);
+    });
+  },
+
+  resendFailedByExecution() {
+    if (!this.exePlanId || !this.planLogExecutionId) {
+      this.$message({ type: "warning", message: "缺少执行批次，无法补发" });
+      return;
+    }
+    resendByExecution(this.exePlanId, this.planLogExecutionId).then((res) => {
+      const count = res && res.data ? (res.data.createdCount || 0) : 0;
+      this.$message({ type: "success", message: `补发任务创建完成，共${count}条` });
+      this.fetchNotificationLogs();
+      this.fetchPlanLogs(true);
+    });
+  },
+
   downloadTextFile(filename, content, mimeType) {
     const blob = new Blob([content], { type: mimeType || "text/plain;charset=utf-8" });
     const url = window.URL.createObjectURL(blob);
@@ -133,4 +183,3 @@ export const planLogMethods = {
     window.URL.revokeObjectURL(url);
   },
 };
-

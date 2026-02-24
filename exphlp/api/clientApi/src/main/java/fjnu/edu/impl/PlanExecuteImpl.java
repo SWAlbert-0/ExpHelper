@@ -15,10 +15,7 @@ import fjnu.edu.exePlanMgr.entity.PlanPreCheckItem;
 import fjnu.edu.exePlanMgr.entity.PlanPreCheckResult;
 import fjnu.edu.exePlanMgr.entity.RunPara;
 import fjnu.edu.intf.PlanExecuteService;
-import fjnu.edu.mail.EmailService;
-import fjnu.edu.mail.MailSendResult;
-import fjnu.edu.platmgr.entity.UserInfo;
-import fjnu.edu.platmgr.service.PlatMgrService;
+import fjnu.edu.notify.service.NotificationService;
 import fjnu.edu.probInstMgr.dao.ProbInstDao;
 import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.service.AlgRltSaveService;
@@ -53,9 +50,7 @@ public class PlanExecuteImpl implements PlanExecuteService {
     @Autowired
     ProbInstDao probInstDao;
     @Autowired
-    PlatMgrService platMgrService;
-    @Autowired
-    EmailService emailService;
+    NotificationService notificationService;
     @Autowired
     DiscoveryClient discoveryClient;
     @Resource(name = "algRestTemplate")
@@ -271,39 +266,9 @@ public class PlanExecuteImpl implements PlanExecuteService {
     }
 
     private void notifyPlanResult(ExePlan exePlan, boolean success) {
-        if (exePlan.getUserIds() == null || exePlan.getUserIds().isEmpty()) {
-            appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
-                    "未配置通知用户，跳过邮件发送", null, null, null, "reasonCode=MAIL_NO_RECEIVERS");
-            return;
-        }
-        String subject = "执行计划通知: " + exePlan.getPlanName();
-        String status = success ? "正常结束" : "异常结束";
-        String content = "计划[" + exePlan.getPlanName() + "]执行" + status +
-                (exePlan.getLastError() == null ? "" : ("，错误信息: " + exePlan.getLastError()));
-        for (String userId : exePlan.getUserIds()) {
-            try {
-                UserInfo user = platMgrService.getUserById(userId);
-                if (user == null) {
-                    appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "WARN", "MAIL_NOTIFY",
-                            "邮件未发送：通知用户不存在", null, null, null, "userId=" + userId + ";reasonCode=MAIL_USER_NOT_FOUND");
-                    continue;
-                }
-                String email = user.getEmail() == null ? "" : user.getEmail().trim();
-                MailSendResult result = emailService.sendMail(email, subject, content);
-                if (result.isSent()) {
-                    appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
-                            "邮件发送成功", null, null, null, "to=" + email + ";reasonCode=" + result.getReasonCode());
-                } else {
-                    appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "WARN", "MAIL_NOTIFY",
-                            "邮件未发送: " + result.getMessage(), null, null, null,
-                            "to=" + email + ";reasonCode=" + result.getReasonCode());
-                }
-            } catch (Exception ex) {
-                appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "WARN", "MAIL_NOTIFY",
-                        "邮件发送异常: " + extractErrorMessage(ex), null, null, null,
-                        "userId=" + userId + ";reasonCode=MAIL_SEND_EXCEPTION");
-            }
-        }
+        int created = notificationService.enqueuePlanDoneNotifications(exePlan, success);
+        appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
+                "通知任务入队完成，已创建任务数=" + created, null, null, null, "reasonCode=MAIL_OUTBOX_ENQUEUED");
     }
 
     private String extractErrorMessage(Throwable throwable) {
