@@ -23,5 +23,5 @@
 
 - 统一入口：`scripts/ops.ps1`
 - 入口说明：`scripts/README.md`
-- 质量门禁：`scripts/check-p0.ps1`
+- 质量门禁：`scripts/ops.ps1 -Action gate`
 

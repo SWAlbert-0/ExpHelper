@@ -21,4 +21,8 @@ public class UserInfo implements Serializable {
     private String mobile;//手机号
     private String qq;//QQ号
     private String avatar;//头像访问路径
+    private String rememberTokenHash;//remember token 哈希（不可逆）
+    private Long rememberTokenIssuedAt;//remember token 签发时间（毫秒）
+    private Long rememberTokenExpireAt;//remember token 过期时间（毫秒）
+    private Integer rememberTokenVersion;//remember token 版本号
 }

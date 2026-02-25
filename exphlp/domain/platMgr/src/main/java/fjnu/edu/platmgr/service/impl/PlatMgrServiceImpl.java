@@ -86,9 +86,36 @@ public class PlatMgrServiceImpl implements PlatMgrService {
     }
 
     @Override
+    public UserInfo getUserByRememberTokenHash(String rememberTokenHash) {
+        try {
+            return userDao.getUserByRememberTokenHash(rememberTokenHash);
+        } catch (Exception e) {
+            throw new BusinessException("查询失败");
+        }
+    }
+
+    @Override
     public boolean updateUserById(UserInfo user) {
         try {
             return userDao.updateUserById(user);
+        } catch (Exception e) {
+            throw new BusinessException("更新失败");
+        }
+    }
+
+    @Override
+    public boolean updateRememberToken(String userId, String tokenHash, long issuedAt, long expireAt, int version) {
+        try {
+            return userDao.updateRememberToken(userId, tokenHash, issuedAt, expireAt, version);
+        } catch (Exception e) {
+            throw new BusinessException("更新失败");
+        }
+    }
+
+    @Override
+    public boolean clearRememberToken(String userId, int version) {
+        try {
+            return userDao.clearRememberToken(userId, version);
         } catch (Exception e) {
             throw new BusinessException("更新失败");
         }

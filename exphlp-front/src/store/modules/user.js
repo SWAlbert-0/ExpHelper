@@ -1,5 +1,5 @@
-import { getInfo, login, logout } from "@/api/auth";
-import { getToken, removeToken, setToken } from "@/utils/auth";
+import { getInfo, login, logout, rememberLogin } from "@/api/auth";
+import { getRememberToken, getToken, removeRememberToken, removeToken, setRememberToken, setToken } from "@/utils/auth";
 const defaultAvatar = require("@/assets/images/default-avatar.svg");
 
 const user = {
@@ -9,7 +9,8 @@ const user = {
     avatar: "",
     roles: [],
     permissions: [],
-    unread_msg_count: 0
+    unread_msg_count: 0,
+    rememberChecked: false
   },
 
   mutations: {
@@ -30,6 +31,9 @@ const user = {
     },
     SET_UNREAD_MSG_COUNT: (state, unread_msg_count) => {
       state.unread_msg_count = unread_msg_count;
+    },
+    SET_REMEMBER_CHECKED: (state, rememberChecked) => {
+      state.rememberChecked = rememberChecked;
     }
   },
 
@@ -39,9 +43,15 @@ const user = {
       const username = userInfo.username.trim();
       const password = userInfo.password;
       return new Promise((resolve, reject) => {
-        login(username, password).then(res => {
+        login(username, password, !!userInfo.rememberMe).then(res => {
           setToken(res.data.token);
+          if (userInfo.rememberMe && res.data.rememberToken) {
+            setRememberToken(res.data.rememberToken);
+          } else {
+            removeRememberToken();
+          }
           commit("SET_TOKEN", res.data.token);
+          commit("SET_REMEMBER_CHECKED", true);
           resolve();
         }).catch(error => {
           reject(error);
@@ -79,6 +89,8 @@ const user = {
           commit("SET_ROLES", []);
           commit("SET_PERMISSIONS", []);
           removeToken();
+          removeRememberToken();
+          commit("SET_REMEMBER_CHECKED", true);
           resolve();
         }).catch(error => {
           reject(error);
@@ -91,7 +103,48 @@ const user = {
       return new Promise(resolve => {
         commit("SET_TOKEN", "");
         removeToken();
+        removeRememberToken();
+        commit("SET_REMEMBER_CHECKED", true);
         resolve();
+      });
+    },
+
+    TryRememberLogin({ commit, state }) {
+      return new Promise(resolve => {
+        if (state.token) {
+          commit("SET_REMEMBER_CHECKED", true);
+          resolve(true);
+          return;
+        }
+        if (state.rememberChecked) {
+          resolve(false);
+          return;
+        }
+        const rememberToken = getRememberToken();
+        if (!rememberToken) {
+          commit("SET_REMEMBER_CHECKED", true);
+          resolve(false);
+          return;
+        }
+        rememberLogin(rememberToken).then(res => {
+          if (res && res.data && res.data.token) {
+            setToken(res.data.token);
+            if (res.data.rememberToken) {
+              setRememberToken(res.data.rememberToken);
+            }
+            commit("SET_TOKEN", res.data.token);
+            commit("SET_REMEMBER_CHECKED", true);
+            resolve(true);
+            return;
+          }
+          removeRememberToken();
+          commit("SET_REMEMBER_CHECKED", true);
+          resolve(false);
+        }).catch(() => {
+          removeRememberToken();
+          commit("SET_REMEMBER_CHECKED", true);
+          resolve(false);
+        });
       });
     }
   }

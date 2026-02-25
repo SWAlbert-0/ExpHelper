@@ -7,6 +7,7 @@ import fjnu.edu.auth.ErrorCode;
 import fjnu.edu.auth.JwtUtil;
 import fjnu.edu.auth.LoginRequest;
 import fjnu.edu.auth.PasswordService;
+import fjnu.edu.auth.RememberLoginRequest;
 import fjnu.edu.auth.TraceContext;
 import fjnu.edu.auth.UserFieldValidator;
 import fjnu.edu.platmgr.entity.UserInfo;
@@ -26,10 +27,14 @@ import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -39,21 +44,25 @@ import java.util.regex.Pattern;
 @RequestMapping("/api/auth")
 public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private final PlatMgrService platMgrService;
     private final PasswordService passwordService;
     private final JwtUtil jwtUtil;
     private final Path avatarDir;
+    private final long rememberExpireDays;
 
     public AuthController(
             PlatMgrService platMgrService,
             PasswordService passwordService,
             JwtUtil jwtUtil,
-            @Value("${auth.avatar-dir:./data/uploads/avatar}") String avatarDir
+            @Value("${auth.avatar-dir:./data/uploads/avatar}") String avatarDir,
+            @Value("${auth.remember.expire-days:30}") long rememberExpireDays
     ) {
         this.platMgrService = platMgrService;
         this.passwordService = passwordService;
         this.jwtUtil = jwtUtil;
         this.avatarDir = Paths.get(avatarDir).toAbsolutePath().normalize();
+        this.rememberExpireDays = rememberExpireDays <= 0 ? 30 : rememberExpireDays;
     }
 
     @PostMapping("/login")
@@ -80,7 +89,51 @@ public class AuthController {
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
         data.put("expiresAt", System.currentTimeMillis() + 24L * 60 * 60 * 1000);
+        boolean rememberMe = request.getRememberMe() != null && request.getRememberMe();
+        if (rememberMe) {
+            String rememberToken = issueRememberToken(userInfo);
+            data.put("rememberToken", rememberToken);
+            data.put("rememberExpiresAt", userInfo.getRememberTokenExpireAt());
+        } else {
+            clearRememberToken(userInfo, false);
+            data.put("rememberToken", null);
+            data.put("rememberExpiresAt", null);
+        }
         log.info("traceId={} userId={} path={} action=login status=success", traceId, userInfo.getUserId(), "/api/auth/login");
+        return ApiResponse.ok(httpRequest, data);
+    }
+
+    @PostMapping("/remember-login")
+    public Map<String, Object> rememberLogin(@RequestBody RememberLoginRequest request, HttpServletRequest httpRequest) {
+        String traceId = TraceContext.getTraceId(httpRequest);
+        if (request == null || !StringUtils.hasText(request.getRememberToken())) {
+            log.warn("traceId={} path={} errorCode={}", traceId, "/api/auth/remember-login", ErrorCode.AUTH_REMEMBER_TOKEN_MISSING.code());
+            return ApiResponse.failed(httpRequest, 400, "rememberToken不能为空", ErrorCode.AUTH_REMEMBER_TOKEN_MISSING.code());
+        }
+        String tokenHash = sha256Hex(request.getRememberToken().trim());
+        UserInfo userInfo = platMgrService.getUserByRememberTokenHash(tokenHash);
+        if (userInfo == null) {
+            log.warn("traceId={} path={} errorCode={}", traceId, "/api/auth/remember-login", ErrorCode.AUTH_REMEMBER_TOKEN_INVALID.code());
+            return ApiResponse.failed(httpRequest, 401, "记住登录已失效，请重新登录", ErrorCode.AUTH_REMEMBER_TOKEN_INVALID.code());
+        }
+        long now = System.currentTimeMillis();
+        Long expireAt = userInfo.getRememberTokenExpireAt();
+        if (expireAt == null || expireAt <= now) {
+            clearRememberToken(userInfo, true);
+            log.warn("traceId={} path={} userId={} errorCode={}", traceId, "/api/auth/remember-login",
+                    userInfo.getUserId(), ErrorCode.AUTH_REMEMBER_TOKEN_EXPIRED.code());
+            return ApiResponse.failed(httpRequest, 401, "记住登录已过期，请重新登录", ErrorCode.AUTH_REMEMBER_TOKEN_EXPIRED.code());
+        }
+        AuthUser authUser = new AuthUser(userInfo.getUserId(), userInfo.getUserName(), userInfo.getRole());
+        String accessToken = jwtUtil.generateToken(authUser);
+        String rotatedRememberToken = issueRememberToken(userInfo);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("token", accessToken);
+        data.put("expiresAt", now + 24L * 60 * 60 * 1000);
+        data.put("rememberToken", rotatedRememberToken);
+        data.put("rememberExpiresAt", userInfo.getRememberTokenExpireAt());
+        log.info("traceId={} userId={} path={} action=rememberLogin status=success", traceId, userInfo.getUserId(), "/api/auth/remember-login");
         return ApiResponse.ok(httpRequest, data);
     }
 
@@ -188,6 +241,7 @@ public class AuthController {
             return ApiResponse.failed(request, 401, "旧密码错误", ErrorCode.PASSWORD_OLD_INVALID.code());
         }
         userInfo.setPassword(passwordService.encode(newPassword));
+        clearRememberToken(userInfo, true);
         platMgrService.updateUserById(userInfo);
         log.info("traceId={} userId={} path={} action=updatePassword status=success", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/password");
         return ApiResponse.ok(request, null);
@@ -255,6 +309,10 @@ public class AuthController {
 
     @PostMapping("/logout")
     public Map<String, Object> logout(HttpServletRequest request) {
+        UserInfo userInfo = currentUser(request);
+        if (userInfo != null) {
+            clearRememberToken(userInfo, true);
+        }
         return ApiResponse.ok(request, null);
     }
 
@@ -290,6 +348,60 @@ public class AuthController {
 
     private String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private String issueRememberToken(UserInfo userInfo) {
+        byte[] bytes = new byte[32];
+        SECURE_RANDOM.nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        long now = System.currentTimeMillis();
+        long expireAt = now + rememberExpireDays * 24L * 60 * 60 * 1000;
+        int version = nextRememberTokenVersion(userInfo);
+        platMgrService.updateRememberToken(userInfo.getUserId(), sha256Hex(token), now, expireAt, version);
+        userInfo.setRememberTokenVersion(version);
+        userInfo.setRememberTokenIssuedAt(now);
+        userInfo.setRememberTokenExpireAt(expireAt);
+        return token;
+    }
+
+    private void clearRememberToken(UserInfo userInfo, boolean bumpVersion) {
+        if (userInfo == null || !StringUtils.hasText(userInfo.getUserId())) {
+            return;
+        }
+        int version = userInfo.getRememberTokenVersion() == null ? 1 : userInfo.getRememberTokenVersion();
+        if (bumpVersion) {
+            version++;
+        }
+        platMgrService.clearRememberToken(userInfo.getUserId(), version);
+        userInfo.setRememberTokenVersion(version);
+        userInfo.setRememberTokenHash(null);
+        userInfo.setRememberTokenIssuedAt(null);
+        userInfo.setRememberTokenExpireAt(null);
+    }
+
+    private int nextRememberTokenVersion(UserInfo userInfo) {
+        if (userInfo == null || userInfo.getRememberTokenVersion() == null) {
+            return 1;
+        }
+        return userInfo.getRememberTokenVersion() + 1;
+    }
+
+    private String sha256Hex(String input) {
+        if (!StringUtils.hasText(input)) {
+            return "";
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] encoded = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(encoded.length * 2);
+            for (byte b : encoded) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+                sb.append(Character.forDigit((b & 0xF), 16));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256不可用", e);
+        }
     }
 
     private String resolveArtifactVersion() {

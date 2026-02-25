@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Resolve-Path (Join-Path $scriptDir "..")
+$repoRoot = Resolve-Path (Join-Path $scriptDir "../..")
 $envPath = Join-Path $repoRoot $EnvFile
 $composePath = Join-Path $repoRoot $ComposeFile
 $m2LocalRepo = (Join-Path $repoRoot ".m2repo")

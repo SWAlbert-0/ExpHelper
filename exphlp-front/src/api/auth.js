@@ -1,10 +1,18 @@
 import request from "@/utils/request";
 
-export function login(username, password) {
+export function login(username, password, rememberMe = false) {
   return request({
     url: "/api/auth/login",
     method: "post",
-    data: { username, password }
+    data: { username, password, rememberMe }
+  });
+}
+
+export function rememberLogin(rememberToken) {
+  return request({
+    url: "/api/auth/remember-login",
+    method: "post",
+    data: { rememberToken }
   });
 }
 

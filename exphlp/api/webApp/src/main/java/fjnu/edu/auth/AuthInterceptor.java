@@ -1,6 +1,6 @@
 package fjnu.edu.auth;
 
-import com.alibaba.fastjson.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -14,9 +14,11 @@ import java.nio.charset.StandardCharsets;
 public class AuthInterceptor implements HandlerInterceptor {
     private static final Logger log = LoggerFactory.getLogger(AuthInterceptor.class);
     private final JwtUtil jwtUtil;
+    private final ObjectMapper objectMapper;
 
-    public AuthInterceptor(JwtUtil jwtUtil) {
+    public AuthInterceptor(JwtUtil jwtUtil, ObjectMapper objectMapper) {
         this.jwtUtil = jwtUtil;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -26,7 +28,10 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
         String path = request.getRequestURI();
-        if (path.startsWith("/api/auth/login") || path.startsWith("/api/auth/captcha") || path.startsWith("/api/auth/healthz")) {
+        if (path.startsWith("/api/auth/login")
+                || path.startsWith("/api/auth/remember-login")
+                || path.startsWith("/api/auth/captcha")
+                || path.startsWith("/api/auth/healthz")) {
             return true;
         }
         if ("GET".equalsIgnoreCase(request.getMethod()) && path.startsWith("/api/auth/avatar/")) {
@@ -56,6 +61,6 @@ public class AuthInterceptor implements HandlerInterceptor {
         response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
         response.setContentType("application/json;charset=UTF-8");
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write(JSON.toJSONString(ApiResponse.failed(request, 401, msg, errorCode)));
+        response.getWriter().write(objectMapper.writeValueAsString(ApiResponse.failed(request, 401, msg, errorCode)));
     }
 }

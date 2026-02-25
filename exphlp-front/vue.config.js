@@ -26,6 +26,8 @@ module.exports = {
   lintOnSave: false,
   // 如果你不需要生产环境的 source map，可以将其设置为 false 以加速生产环境构建。
   productionSourceMap: false,
+  // 某些 Windows 环境会限制子进程创建（spawn EPERM），关闭并行 worker 提高稳定性。
+  parallel: false,
   // webpack-dev-server 相关配置
   devServer: {
     host: '0.0.0.0',
@@ -75,6 +77,12 @@ module.exports = {
     config
       .when(process.env.NODE_ENV !== 'development',
         config => {
+          config.optimization
+            .minimizer('terser')
+            .tap(args => {
+              args[0].parallel = false
+              return args
+            })
           config
             .plugin('ScriptExtHtmlWebpackPlugin')
             .after('html')

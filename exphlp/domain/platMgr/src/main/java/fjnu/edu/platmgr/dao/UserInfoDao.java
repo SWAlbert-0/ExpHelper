@@ -112,6 +112,14 @@ public class UserInfoDao {
         return userInfo;
     }
 
+    public UserInfo getUserByRememberTokenHash(String rememberTokenHash) {
+        if (!StringUtils.hasText(rememberTokenHash)) {
+            return null;
+        }
+        Query query = new Query(Criteria.where("rememberTokenHash").is(rememberTokenHash));
+        return mongoTemplate.findOne(query, UserInfo.class, "userMgr");
+    }
+
     /**
      * @Author wsn
      * @Description 根据用户id更新用户
@@ -136,6 +144,34 @@ public class UserInfoDao {
 
         return true;
 
+    }
+
+    public boolean updateRememberToken(String userId, String tokenHash, long issuedAt, long expireAt, int version) {
+        if (!StringUtils.hasText(userId) || !StringUtils.hasText(tokenHash)) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(userId));
+        Update update = new Update()
+                .set("rememberTokenHash", tokenHash)
+                .set("rememberTokenIssuedAt", issuedAt)
+                .set("rememberTokenExpireAt", expireAt)
+                .set("rememberTokenVersion", version);
+        mongoTemplate.updateFirst(query, update, UserInfo.class, "userMgr");
+        return true;
+    }
+
+    public boolean clearRememberToken(String userId, int version) {
+        if (!StringUtils.hasText(userId)) {
+            return false;
+        }
+        Query query = new Query(buildIdCriteria(userId));
+        Update update = new Update()
+                .unset("rememberTokenHash")
+                .unset("rememberTokenIssuedAt")
+                .unset("rememberTokenExpireAt")
+                .set("rememberTokenVersion", version);
+        mongoTemplate.updateFirst(query, update, UserInfo.class, "userMgr");
+        return true;
     }
 
     public long countAllUsers() {

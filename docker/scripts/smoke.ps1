@@ -1,7 +1,7 @@
 param(
     [string]$ApiBase = "http://localhost:8080",
-    [string]$User = "admin",
-    [string]$Password = "123456"
+    [string]$User = $env:APP_INIT_ADMIN_USER,
+    [string]$Password = $env:APP_INIT_ADMIN_PASSWORD
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,12 +55,16 @@ $allPass = (Test-Endpoint "GET /api/auth/captcha" {
 }) -and $allPass
 
 $token = $null
-$allPass = (Test-Endpoint "POST /api/auth/login" {
-    $body = @{ username = $User; password = $Password } | ConvertTo-Json
-    $r = Invoke-RestMethod -Method Post -Uri "$ApiBase/api/auth/login" -ContentType "application/json" -Body $body
-    if (-not $r -or $r.code -ne 200 -or -not $r.data.token) { throw "login failed" }
-    $script:token = $r.data.token
-}) -and $allPass
+if ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Password)) {
+    Write-Warn "未提供管理员凭据（APP_INIT_ADMIN_USER / APP_INIT_ADMIN_PASSWORD），跳过鉴权相关 smoke 项。"
+} else {
+    $allPass = (Test-Endpoint "POST /api/auth/login" {
+        $body = @{ username = $User; password = $Password } | ConvertTo-Json
+        $r = Invoke-RestMethod -Method Post -Uri "$ApiBase/api/auth/login" -ContentType "application/json" -Body $body
+        if (-not $r -or $r.code -ne 200 -or -not $r.data.token) { throw "login failed" }
+        $script:token = $r.data.token
+    }) -and $allPass
+}
 
 if ($token) {
     $allPass = (Test-Endpoint "GET /api/auth/me" {

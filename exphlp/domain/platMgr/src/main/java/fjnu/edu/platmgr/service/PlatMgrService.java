@@ -50,11 +50,17 @@ public interface PlatMgrService {
      **/
     UserInfo getUserByName(String userName);
 
+    UserInfo getUserByRememberTokenHash(String rememberTokenHash);
+
     /**
      * @Author wsn
      * @Description 根据Id更新用户
      **/
     boolean updateUserById(UserInfo user);
+
+    boolean updateRememberToken(String userId, String tokenHash, long issuedAt, long expireAt, int version);
+
+    boolean clearRememberToken(String userId, int version);
 
     public long countAllUsers();
 

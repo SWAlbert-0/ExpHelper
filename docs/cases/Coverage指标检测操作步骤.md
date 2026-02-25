@@ -31,7 +31,7 @@
 ## 3. 准备环境
 
 1. 启动平台
-- `powershell -ExecutionPolicy Bypass -File scripts/rebuild-webapp-front.ps1`
+- `powershell -ExecutionPolicy Bypass -File scripts/ops.ps1 -Action deploy`
 
 2. 启动至少两个可比较算法服务（建议同问题族）
 - `moead-lsmop-ls`

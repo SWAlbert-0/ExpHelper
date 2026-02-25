@@ -266,7 +266,7 @@ export default {
       };
       if (action === "deploy") {
         this.$alert(
-          "请在项目根目录执行：\npowershell -ExecutionPolicy Bypass -File scripts/rebuild-webapp-front.ps1",
+          "请在项目根目录执行：\npowershell -ExecutionPolicy Bypass -File scripts/ops.ps1 -Action deploy",
           "部署修复建议",
           { confirmButtonText: "知道了", type: "warning" }
         );

@@ -10,9 +10,25 @@ $ErrorActionPreference = "Stop"
 function Write-Ok([string]$msg) { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Write-Info([string]$msg) { Write-Host "[INFO] $msg" -ForegroundColor Cyan }
 function Write-Fail([string]$msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red }
+function Invoke-MavenPackage([string]$workDir) {
+    if (-not (Test-Path $m2LocalRepo)) {
+        New-Item -Path $m2LocalRepo -ItemType Directory -Force | Out-Null
+    }
+    $repoArg = "-Dmaven.repo.local=$($m2LocalRepo -replace '\\','/')"
+    $argList = @("-q", $repoArg, "-DskipTests", "package")
+    $mvnCmd = "mvn"
+    if (Get-Command mvn.cmd -ErrorAction SilentlyContinue) {
+        $mvnCmd = "mvn.cmd"
+    }
+    $proc = Start-Process -FilePath $mvnCmd -ArgumentList $argList -WorkingDirectory $workDir -Wait -PassThru -NoNewWindow
+    if ($proc.ExitCode -ne 0) {
+        Write-Fail "webapp 打包失败。"
+        exit $proc.ExitCode
+    }
+}
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Resolve-Path (Join-Path $scriptDir "..")
+$repoRoot = Resolve-Path (Join-Path $scriptDir "../..")
 $envPath = Join-Path $repoRoot $EnvFile
 $composePath = Join-Path $repoRoot $ComposeFile
 $services = @("webapp", "exphlp_front")
@@ -22,6 +38,7 @@ $frontDir = Join-Path $repoRoot "exphlp-front"
 $frontDist = Join-Path $frontDir "dist"
 $frontCache = Join-Path $frontDir "node_modules/.cache"
 $repoNpmCache = Join-Path $repoRoot ".npm-cache"
+$m2LocalRepo = Join-Path $repoRoot ".m2repo"
 
 Write-Info "Repo: $repoRoot"
 Write-Info "Compose: $composePath"
@@ -65,16 +82,7 @@ if (-not $SkipLocalCacheClean) {
 }
 
 Write-Info "先构建 webapp JAR（避免旧包被重复打进镜像）"
-Push-Location $webappDir
-try {
-    mvn -q -DskipTests package
-    if ($LASTEXITCODE -ne 0) {
-        Write-Fail "webapp 打包失败。"
-        exit $LASTEXITCODE
-    }
-} finally {
-    Pop-Location
-}
+Invoke-MavenPackage -workDir $webappDir
 if (-not (Test-Path $webappJar)) {
     Write-Fail "未找到打包产物: $webappJar"
     exit 1

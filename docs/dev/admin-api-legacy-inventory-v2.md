@@ -27,9 +27,9 @@
 ## 隔离策略（当前生效）
 
 - 前端请求拦截器对 `"/admin/*"` 调用直接拒绝并提示“该功能已下线，请使用实验助手业务模块”。
-- `scripts/check-p0.ps1` 已新增校验：除拦截哨兵外，禁止新增 `/admin/` 引用。
+- `scripts/ops.ps1 -Action gate`（内部调用 `scripts/tasks/check-p0.ps1`）已新增校验：除拦截哨兵外，禁止新增 `/admin/` 引用。
 
 ## 下一步
 
-1. 在 CI 中强制执行 `scripts/check-p0.ps1`（含 `/admin/` 与 legacy import baseline 校验）。
+1. 在 CI 中强制执行 `scripts/ops.ps1 -Action gate`（含 `/admin/` 与 legacy import baseline 校验）。
 2. 对新接口模块补充最小单测或契约检查，防止命名迁移后行为回退。

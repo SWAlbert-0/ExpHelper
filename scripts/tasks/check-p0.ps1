@@ -1,10 +1,30 @@
 param(
     [switch]$SkipSmoke = $false,
     [switch]$SkipE2E = $false,
-    [string]$ApiBase = "http://localhost:8080"
+    [string]$ApiBase = "http://localhost:8080",
+    [string]$EnvFile = "docker/.env",
+    [string]$ComposeFile = "docker/docker-compose.yml"
 )
 
 $ErrorActionPreference = "Stop"
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../..")
+$m2LocalRepo = Join-Path $repoRoot ".m2repo"
+$envPath = Join-Path $repoRoot $EnvFile
+$composePath = Join-Path $repoRoot $ComposeFile
+
+function Invoke-Maven([string[]]$mvnArgs, [string]$workingDir) {
+    if (-not (Test-Path $m2LocalRepo)) {
+        New-Item -Path $m2LocalRepo -ItemType Directory -Force | Out-Null
+    }
+    $repoArg = "-Dmaven.repo.local=$($m2LocalRepo -replace '\\','/')"
+    $argList = @($repoArg) + $mvnArgs
+    $mvnCmd = "mvn"
+    if (Get-Command mvn.cmd -ErrorAction SilentlyContinue) {
+        $mvnCmd = "mvn.cmd"
+    }
+    $proc = Start-Process -FilePath $mvnCmd -ArgumentList $argList -WorkingDirectory $workingDir -Wait -PassThru -NoNewWindow
+    return $proc.ExitCode
+}
 
 function Run-Step([string]$name, [scriptblock]$action) {
     Write-Host "==> $name" -ForegroundColor Cyan
@@ -17,15 +37,28 @@ function Run-Step([string]$name, [scriptblock]$action) {
     }
 }
 
+function Invoke-FrontDockerBuildFallback {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        throw "frontend build failed and docker is unavailable for fallback."
+    }
+    if (-not (Test-Path $envPath)) {
+        throw "frontend build failed and env file not found for fallback: $envPath"
+    }
+    if (-not (Test-Path $composePath)) {
+        throw "frontend build failed and compose file not found for fallback: $composePath"
+    }
+    Write-Host "[WARN] 启用 Docker 前端构建回退（本机 Node 进程权限受限）" -ForegroundColor Yellow
+    docker compose --env-file $envPath -f $composePath build exphlp_front
+    if ($LASTEXITCODE -ne 0) {
+        throw "frontend docker build fallback failed with exit code $LASTEXITCODE"
+    }
+}
+
 Run-Step "Backend tests (mvn -q test)" {
-    Push-Location "exphlp"
-    try {
-        mvn -q test
-        if ($LASTEXITCODE -ne 0) {
-            throw "mvn test failed with exit code $LASTEXITCODE"
-        }
-    } finally {
-        Pop-Location
+    $backendDir = Join-Path $repoRoot "exphlp"
+    $code = Invoke-Maven -mvnArgs @("-q", "test") -workingDir $backendDir
+    if ($code -ne 0) {
+        throw "mvn test failed with exit code $code"
     }
 }
 
@@ -92,7 +125,17 @@ Run-Step "Frontend production build" {
     try {
         npm run build:prod
         if ($LASTEXITCODE -ne 0) {
-            throw "frontend build failed with exit code $LASTEXITCODE"
+            Write-Host "[WARN] 首次前端构建失败，重试并禁用 terser 并行子进程。" -ForegroundColor Yellow
+            $oldTerserParallel = $env:TERSER_PARALLEL
+            try {
+                $env:TERSER_PARALLEL = "false"
+                npm run build:prod
+                if ($LASTEXITCODE -ne 0) {
+                    Invoke-FrontDockerBuildFallback
+                }
+            } finally {
+                $env:TERSER_PARALLEL = $oldTerserParallel
+            }
         }
     } finally {
         Pop-Location

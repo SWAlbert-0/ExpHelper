@@ -1,6 +1,7 @@
 package fjnu.edu.common.utils.wechat;
 
-import com.alibaba.fastjson.JSONObject;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import fjnu.edu.common.config.weconfig.WxMpProperties;
 import fjnu.edu.common.utils.HttpUtil;
 import org.apache.http.HttpEntity;
@@ -24,6 +25,7 @@ import java.util.concurrent.TimeUnit;
  **/
 @Component
 public class WechatUtil {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     @Autowired
     RedisTemplate redisTemplate;
 
@@ -47,9 +49,11 @@ public class WechatUtil {
             InputStream inputStream = entity.getContent();
             byte[] data = readInputStream(inputStream);
             String str = new String(data);
-            JSONObject json = JSONObject.parseObject(str);
-            token = (String) json.get("access_token");
-            redisTemplate.opsForValue().set("access_token", token,55*2, TimeUnit.MINUTES);
+            JsonNode json = OBJECT_MAPPER.readTree(str);
+            token = json.path("access_token").asText(null);
+            if (token != null && !token.isEmpty()) {
+                redisTemplate.opsForValue().set("access_token", token,55*2, TimeUnit.MINUTES);
+            }
             System.out.println(str);
             return token;
         }

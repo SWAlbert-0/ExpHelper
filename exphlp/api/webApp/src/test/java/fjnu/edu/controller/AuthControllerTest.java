@@ -4,6 +4,7 @@ import fjnu.edu.auth.AuthUser;
 import fjnu.edu.auth.JwtUtil;
 import fjnu.edu.auth.LoginRequest;
 import fjnu.edu.auth.PasswordService;
+import fjnu.edu.auth.RememberLoginRequest;
 import fjnu.edu.platmgr.entity.UserInfo;
 import fjnu.edu.platmgr.service.PlatMgrService;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,7 @@ class AuthControllerTest {
         platMgrService = mock(PlatMgrService.class);
         passwordService = mock(PasswordService.class);
         jwtUtil = mock(JwtUtil.class);
-        controller = new AuthController(platMgrService, passwordService, jwtUtil, "./target/test-avatar");
+        controller = new AuthController(platMgrService, passwordService, jwtUtil, "./target/test-avatar", 30);
     }
 
     @Test
@@ -41,6 +42,17 @@ class AuthControllerTest {
 
         assertEquals(401, response.get("code"));
         assertEquals("AUTH_INVALID_CREDENTIALS", response.get("errorCode"));
+    }
+
+    @Test
+    void rememberLoginRejectsWhenTokenMissing() {
+        RememberLoginRequest request = new RememberLoginRequest();
+
+        Map<String, Object> response = controller.rememberLogin(request, new MockHttpServletRequest());
+
+        assertEquals(400, response.get("code"));
+        assertEquals("AUTH_REMEMBER_TOKEN_MISSING", response.get("errorCode"));
+        verifyNoInteractions(platMgrService);
     }
 
     @Test
@@ -61,4 +73,3 @@ class AuthControllerTest {
         assertEquals("USER_MOBILE_INVALID", response.get("errorCode"));
     }
 }
-

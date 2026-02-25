@@ -1,11 +1,15 @@
 param(
-    [ValidateSet("bootstrap", "deploy", "check", "alg-up", "alg-down", "alg-check")]
+    [ValidateSet("bootstrap", "deploy", "check", "alg-up", "alg-down", "alg-check", "gate", "onboarding")]
     [string]$Action = "bootstrap",
     [string]$EnvFile = "docker/.env",
     [string]$ComposeFile = "docker/docker-compose.yml",
     [switch]$SkipBaseBuild,
     [switch]$SkipAlgorithmServices,
     [switch]$SkipLocalPackage,
+    [switch]$SkipSmoke,
+    [switch]$SkipE2E,
+    [switch]$SkipAlgCheck,
+    [switch]$SkipRuntime,
     [ValidateSet("auto", "online", "offline")]
     [string]$Mode = "auto"
 )
@@ -14,7 +18,7 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Invoke-Script([string]$name, [string[]]$extraArgs) {
-    $target = Join-Path $scriptDir $name
+    $target = Join-Path (Join-Path $scriptDir "tasks") $name
     if (-not (Test-Path $target)) {
         Write-Host "[FAIL] script not found: $target" -ForegroundColor Red
         exit 1
@@ -50,5 +54,22 @@ switch ($Action) {
     }
     "alg-check" {
         Invoke-Script -name "check-alg-services.ps1" -extraArgs @()
+    }
+    "gate" {
+        $target = Join-Path (Join-Path $scriptDir "pipelines") "gate-runtime.ps1"
+        if (-not (Test-Path $target)) {
+            Write-Host "[FAIL] script not found: $target" -ForegroundColor Red
+            exit 1
+        }
+        $args = @("-ExecutionPolicy", "Bypass", "-File", $target, "-EnvFile", $EnvFile, "-ComposeFile", $ComposeFile)
+        if ($SkipSmoke) { $args += "-SkipSmoke" }
+        if ($SkipE2E) { $args += "-SkipE2E" }
+        if ($SkipAlgCheck) { $args += "-SkipAlgCheck" }
+        if ($SkipRuntime) { $args += "-SkipRuntime" }
+        & powershell @args
+        exit $LASTEXITCODE
+    }
+    "onboarding" {
+        Invoke-Script -name "open-onboarding-links.ps1" -extraArgs @()
     }
 }
