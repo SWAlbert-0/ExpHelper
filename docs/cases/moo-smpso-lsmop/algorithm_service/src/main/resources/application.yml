@@ -1,0 +1,19 @@
+﻿server:
+  port: ${ALG_PORT:18084}
+spring:
+  application:
+    name: ${ALG_SERVICE_NAME:smpso-lsmop-ls}
+  cloud:
+    service-registry:
+      auto-registration:
+        fail-fast: false
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        register-enabled: true
+        ephemeral: true
+        ip: ${NACOS_REGISTER_IP:}
+        fail-fast: false
+

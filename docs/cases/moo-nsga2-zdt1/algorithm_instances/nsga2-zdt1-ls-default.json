@@ -1,0 +1,43 @@
+{
+  "algName": "nsga2-zdt1-ls",
+  "serviceName": "nsga2-zdt1-ls",
+  "description": "NSGA-II large-scale ZDT1 baseline",
+  "defParas": [
+    {
+      "paraName": "nVars",
+      "paraType": "int",
+      "paraValue": "100",
+      "description": "decision variable dimension"
+    },
+    {
+      "paraName": "populationSize",
+      "paraType": "int",
+      "paraValue": "200",
+      "description": "population size"
+    },
+    {
+      "paraName": "maxGenerations",
+      "paraType": "int",
+      "paraValue": "250",
+      "description": "iteration generations"
+    },
+    {
+      "paraName": "crossoverProbability",
+      "paraType": "double",
+      "paraValue": "0.9",
+      "description": "crossover probability"
+    },
+    {
+      "paraName": "mutationProbability",
+      "paraType": "double",
+      "paraValue": "0.01",
+      "description": "mutation probability"
+    },
+    {
+      "paraName": "seed",
+      "paraType": "long",
+      "paraValue": "20260223",
+      "description": "random seed for reproducibility"
+    }
+  ]
+}

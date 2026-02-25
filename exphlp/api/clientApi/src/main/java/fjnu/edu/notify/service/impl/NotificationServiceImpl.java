@@ -459,7 +459,10 @@ public class NotificationServiceImpl implements NotificationService {
                     .append(", Runtime(ms)=").append(formatMetric(agg == null ? null : agg.getRuntimeMsMean()))
                     .append(", HV=").append(formatMetric(agg == null ? null : agg.getHvMean()))
                     .append(", IGD+=").append(formatMetric(agg == null ? null : agg.getIgdPlusMean()))
+                    .append(", GD=").append(formatMetric(agg == null ? null : agg.getGdMean()))
+                    .append(", Coverage=").append(formatMetric(agg == null ? null : agg.getCoverageMean()))
                     .append(", Spread=").append(formatMetric(agg == null ? null : agg.getSpreadDeltaMean()))
+                    .append(", Spacing=").append(formatMetric(agg == null ? null : agg.getSpacingMean()))
                     .append("\n");
         }
     }
@@ -476,9 +479,9 @@ public class NotificationServiceImpl implements NotificationService {
             sb.append("<h4 style='margin:16px 0 8px;'>算法：").append(escapeHtml(info.getAlgName()))
                     .append("（").append(escapeHtml(info.getAlgId())).append("）</h4>");
             sb.append("<table border='1' cellspacing='0' cellpadding='6' style='border-collapse:collapse;width:100%;margin-bottom:8px;'>");
-            sb.append("<tr style='background:#F5F7FA;'><th>状态</th><th>原因</th><th>运行条数</th><th>Runtime(ms)</th><th>HV</th><th>IGD+</th><th>Spread(Δ)</th><th>指标版本</th></tr>");
+            sb.append("<tr style='background:#F5F7FA;'><th>状态</th><th>原因</th><th>运行条数</th><th>Runtime(ms)</th><th>HV</th><th>IGD+</th><th>GD</th><th>Coverage</th><th>Spread(Δ)</th><th>Spacing</th><th>指标版本</th></tr>");
             if (detail == null) {
-                sb.append("<tr><td>MISSING</td><td>RESULT_NOT_FOUND</td><td>0</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>");
+                sb.append("<tr><td>MISSING</td><td>RESULT_NOT_FOUND</td><td>0</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>");
             } else {
                 ExeResultAggregate agg = detail.getAggregate();
                 sb.append("<tr>")
@@ -488,16 +491,19 @@ public class NotificationServiceImpl implements NotificationService {
                         .append("<td>").append(formatMetric(agg == null ? null : agg.getRuntimeMsMean())).append("</td>")
                         .append("<td>").append(formatMetric(agg == null ? null : agg.getHvMean())).append("</td>")
                         .append("<td>").append(formatMetric(agg == null ? null : agg.getIgdPlusMean())).append("</td>")
+                        .append("<td>").append(formatMetric(agg == null ? null : agg.getGdMean())).append("</td>")
+                        .append("<td>").append(formatMetric(agg == null ? null : agg.getCoverageMean())).append("</td>")
                         .append("<td>").append(formatMetric(agg == null ? null : agg.getSpreadDeltaMean())).append("</td>")
+                        .append("<td>").append(formatMetric(agg == null ? null : agg.getSpacingMean())).append("</td>")
                         .append("<td>").append(escapeHtml(detail.getMetricVersion())).append("</td>")
                         .append("</tr>");
             }
             sb.append("</table>");
 
             sb.append("<table border='1' cellspacing='0' cellpadding='6' style='border-collapse:collapse;width:100%;'>");
-            sb.append("<tr style='background:#F5F7FA;'><th>run</th><th>问题实例</th><th>Runtime(ms)</th><th>Pareto点数</th><th>HV</th><th>IGD+</th><th>Spread(Δ)</th><th>指标状态</th><th>原因码</th></tr>");
+            sb.append("<tr style='background:#F5F7FA;'><th>run</th><th>问题实例</th><th>Runtime(ms)</th><th>Pareto点数</th><th>HV</th><th>IGD+</th><th>GD</th><th>Coverage</th><th>Spread(Δ)</th><th>Spacing</th><th>指标状态</th><th>原因码</th></tr>");
             if (detail == null || detail.getRuns() == null || detail.getRuns().isEmpty()) {
-                sb.append("<tr><td colspan='9' style='text-align:center;'>暂无明细</td></tr>");
+                sb.append("<tr><td colspan='12' style='text-align:center;'>暂无明细</td></tr>");
             } else {
                 int total = detail.getRuns().size();
                 int limit = Math.min(10, total);
@@ -510,13 +516,16 @@ public class NotificationServiceImpl implements NotificationService {
                             .append("<td>").append(formatMetric(run == null ? null : run.getParetoSize())).append("</td>")
                             .append("<td>").append(formatMetric(run == null ? null : run.getHv())).append("</td>")
                             .append("<td>").append(formatMetric(run == null ? null : run.getIgdPlus())).append("</td>")
+                            .append("<td>").append(formatMetric(run == null ? null : run.getGd())).append("</td>")
+                            .append("<td>").append(formatMetric(run == null ? null : run.getCoverage())).append("</td>")
                             .append("<td>").append(formatMetric(run == null ? null : run.getSpreadDelta())).append("</td>")
+                            .append("<td>").append(formatMetric(run == null ? null : run.getSpacing())).append("</td>")
                             .append("<td>").append(escapeHtml(run == null ? "" : run.getMetricStatus())).append("</td>")
                             .append("<td>").append(escapeHtml(run == null ? "" : run.getReasonCode())).append("</td>")
                             .append("</tr>");
                 }
                 if (total > limit) {
-                    sb.append("<tr><td colspan='9' style='text-align:right;color:#909399;'>共").append(total).append("条，邮件仅展示前").append(limit).append("条</td></tr>");
+                    sb.append("<tr><td colspan='12' style='text-align:right;color:#909399;'>共").append(total).append("条，邮件仅展示前").append(limit).append("条</td></tr>");
                 }
             }
             sb.append("</table>");

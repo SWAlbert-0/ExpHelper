@@ -6,6 +6,8 @@ import fjnu.edu.alglibmgr.entity.AlgInfo;
 import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
 import fjnu.edu.alglibmgr.entity.DefPara;
 import fjnu.edu.alglibmgr.service.AlgLibMgrService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -16,6 +18,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 @RestController
 @CrossOrigin
@@ -26,6 +29,9 @@ public class AlgLibMgrCtrl {
 
     @Autowired
     ExePlanMgrService exePlanMgrService;
+
+    @Autowired
+    ObjectMapper objectMapper;
 
     @PostMapping("/addAlg")
     public String addAlgInfo (@RequestBody AlgInfo algInfo) {
@@ -40,6 +46,68 @@ public class AlgLibMgrCtrl {
             return algInfo.getAlgName();
         }
 
+    }
+
+    @PostMapping("/importAlgsJson")
+    public Map<String, Object> importAlgsJson(@RequestBody Map<String, Object> payload, HttpServletRequest request) {
+        String jsonText = payload == null ? "" : String.valueOf(payload.getOrDefault("jsonText", ""));
+        if (!StringUtils.hasText(jsonText)) {
+            return ApiResponse.failed(request, 400, "JSON内容不能为空", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        try {
+            JsonNode root = objectMapper.readTree(jsonText);
+            List<JsonNode> nodes = new ArrayList<>();
+            if (root.isArray()) {
+                root.forEach(nodes::add);
+            } else if (root.isObject() && root.has("items") && root.get("items").isArray()) {
+                root.get("items").forEach(nodes::add);
+            } else if (root.isObject()) {
+                nodes.add(root);
+            } else {
+                return ApiResponse.failed(request, 400, "JSON结构不合法，需为对象、数组或包含items数组的对象", ErrorCode.INVALID_ARGUMENT.code());
+            }
+
+            int success = 0;
+            int skipped = 0;
+            int failed = 0;
+            List<Map<String, Object>> failures = new ArrayList<>();
+            for (int i = 0; i < nodes.size(); i++) {
+                JsonNode item = nodes.get(i);
+                try {
+                    AlgInfo algInfo = objectMapper.convertValue(item, AlgInfo.class);
+                    normalizeAlgInfo(algInfo);
+                    if (algInfo == null || !StringUtils.hasText(algInfo.getAlgName())) {
+                        throw new IllegalArgumentException("algName不能为空");
+                    }
+                    if (!StringUtils.hasText(algInfo.getServiceName())) {
+                        throw new IllegalArgumentException("serviceName不能为空");
+                    }
+                    if (algLibMgrService.getAlgInfoByName(algInfo.getAlgName()) != null) {
+                        skipped++;
+                        continue;
+                    }
+                    algLibMgrService.addAlgInfo(algInfo);
+                    success++;
+                } catch (Exception ex) {
+                    failed++;
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("index", i);
+                    row.put("algName", item.has("algName") ? item.get("algName").asText("") : "");
+                    row.put("reason", ex.getMessage());
+                    failures.add(row);
+                }
+            }
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("total", nodes.size());
+            data.put("success", success);
+            data.put("skipped", skipped);
+            data.put("failed", failed);
+            data.put("failures", failures);
+            return ApiResponse.ok(request, data, "算法JSON导入完成");
+        } catch (Exception ex) {
+            return ApiResponse.failed(request, 400, "JSON解析失败: " + ex.getMessage(), ErrorCode.INVALID_ARGUMENT.code());
+        }
     }
 
     @PostMapping("/deleteAlgById")
@@ -185,6 +253,33 @@ public class AlgLibMgrCtrl {
                 "    ports:\n" +
                 "      - \"18082:18082\"\n" +
                 "    restart: unless-stopped\n";
+    }
+
+    private void normalizeAlgInfo(AlgInfo algInfo) {
+        if (algInfo == null) {
+            return;
+        }
+        algInfo.setAlgId(null);
+        algInfo.setAlgName(trimOrEmpty(algInfo.getAlgName()));
+        algInfo.setServiceName(trimOrEmpty(algInfo.getServiceName()));
+        algInfo.setDescription(trimOrEmpty(algInfo.getDescription()));
+        if (algInfo.getDefParas() != null) {
+            for (int i = 0; i < algInfo.getDefParas().size(); i++) {
+                DefPara para = algInfo.getDefParas().get(i);
+                if (para == null) {
+                    continue;
+                }
+                para.setParaId(i + 1);
+                para.setParaName(trimOrEmpty(para.getParaName()));
+                para.setParaType(trimOrEmpty(para.getParaType()));
+                para.setParaValue(trimOrEmpty(para.getParaValue()));
+                para.setDescription(trimOrEmpty(para.getDescription()));
+            }
+        }
+    }
+
+    private String trimOrEmpty(String text) {
+        return text == null ? "" : text.trim();
     }
 
 }

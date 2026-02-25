@@ -11,10 +11,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
@@ -77,5 +80,62 @@ class AlgRltSaveServiceImplTest {
         assertTrue(detail.getRuns().get(0).getIgdPlus() != null && detail.getRuns().get(0).getIgdPlus() >= 0d);
         verify(dao, times(1)).updateMetricCache(anyString(), anyString(), anyString(), anyDouble(), anyDouble(), anyInt(), any(), anyLong());
     }
-}
 
+    @Test
+    void getExeResultDetailKeepsSuccessWhenCoverageNotComparable() {
+        PlanExeResult current = buildPlan("p-3", "alg-current", "nsga2-zdt1-ls");
+        when(dao.getLatestByPlanAndAlg("p-3", "alg-current")).thenReturn(current);
+        when(dao.listLatestByPlan("p-3")).thenReturn(Collections.singletonList(current));
+
+        ExeResultDetail detail = service.getExeResultDetail("p-3", "alg-current");
+
+        assertEquals("SUCCESS", detail.getStatus());
+        assertNotNull(detail.getRuns());
+        assertEquals(1, detail.getRuns().size());
+        assertNull(detail.getRuns().get(0).getCoverage());
+        assertEquals("OK", detail.getRuns().get(0).getReasonCode());
+    }
+
+    @Test
+    void getExeResultDetailComputesCoverageWhenPeerExists() {
+        PlanExeResult current = buildPlan("p-4", "alg-a", "nsga2-zdt1-ls-a");
+        PlanExeResult peer = buildPlan("p-4", "alg-b", "nsga2-zdt1-ls-b");
+        // Make peer front worse so coverage(current, peer) > 0
+        peer.getGenResults().get(0).setEachResults(Arrays.asList(
+                new EachResult("runtimeMs", "130", "long"),
+                new EachResult("paretoSize", "2", "int"),
+                new EachResult("paretoPoint_1", "f1=0.20,f2=0.78", "pair"),
+                new EachResult("paretoPoint_2", "f1=0.50,f2=0.50", "pair")
+        ));
+        when(dao.getLatestByPlanAndAlg("p-4", "alg-a")).thenReturn(current);
+        List<PlanExeResult> all = new ArrayList<>();
+        all.add(current);
+        all.add(peer);
+        when(dao.listLatestByPlan("p-4")).thenReturn(all);
+
+        ExeResultDetail detail = service.getExeResultDetail("p-4", "alg-a");
+
+        assertEquals("SUCCESS", detail.getStatus());
+        assertTrue(detail.getRuns().get(0).getCoverage() != null && detail.getRuns().get(0).getCoverage() > 0d);
+    }
+
+    private PlanExeResult buildPlan(String planId, String algId, String algName) {
+        PlanExeResult saved = new PlanExeResult();
+        saved.setPlanExeResultId("rid-" + algId);
+        saved.setPlanId(planId);
+        saved.setAlgId(algId);
+        saved.setAlgName(algName);
+        saved.setStartTime(1700000000000L);
+        GenResult gen = new GenResult();
+        gen.setProbInstId("prob-1");
+        gen.setOutTime(1700000005000L);
+        gen.setEachResults(Arrays.asList(
+                new EachResult("runtimeMs", "120", "long"),
+                new EachResult("paretoSize", "2", "int"),
+                new EachResult("paretoPoint_1", "f1=0.10,f2=0.68", "pair"),
+                new EachResult("paretoPoint_2", "f1=0.40,f2=0.40", "pair")
+        ));
+        saved.setGenResults(Collections.singletonList(gen));
+        return saved;
+    }
+}

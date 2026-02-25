@@ -10,6 +10,8 @@ public class ExeResultAggregate {
     private Double runtimeMsMean;
     private Double hvMean;
     private Double igdPlusMean;
+    private Double gdMean;
+    private Double coverageMean;
     private Double spreadDeltaMean;
+    private Double spacingMean;
 }
-

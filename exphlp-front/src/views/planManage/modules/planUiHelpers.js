@@ -1,5 +1,9 @@
 export function formatTimestampToDateTime(timestamp) {
-  const dateObject = new Date(timestamp);
+  const ms = normalizeToEpochMsOrZero(timestamp);
+  if (ms <= 0) {
+    return "--";
+  }
+  const dateObject = new Date(ms);
   const options = {
     year: "numeric",
     month: "2-digit",
@@ -11,6 +15,25 @@ export function formatTimestampToDateTime(timestamp) {
   };
   const formattedDate = new Intl.DateTimeFormat("zh-CN", options).format(dateObject);
   return formattedDate.replace(/\//g, "-");
+}
+
+export function normalizeToEpochMsOrZero(value) {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+  const text = String(value).trim();
+  if (!text || text === "--") {
+    return 0;
+  }
+  if (/^\d+$/.test(text)) {
+    const asNum = Number(text);
+    return Number.isFinite(asNum) && asNum > 0 ? asNum : 0;
+  }
+  const parsed = new Date(text).getTime();
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 export function getCurrentDateTime() {

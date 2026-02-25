@@ -45,5 +45,5 @@ auth:
 alg:
   call:
     connect-timeout-ms: ${ALG_CALL_CONNECT_TIMEOUT_MS:3000}
-    read-timeout-ms: ${ALG_CALL_READ_TIMEOUT_MS:10000}
+    read-timeout-ms: ${ALG_CALL_READ_TIMEOUT_MS:60000}
     retry-times: ${ALG_CALL_RETRY_TIMES:1}

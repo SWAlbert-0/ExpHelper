@@ -6,6 +6,8 @@ import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import fjnu.edu.probInstMgr.entity.ProbDeleteResult;
 import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.probInstMgr.service.ProbInstMgrService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +17,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 @RestController
 @CrossOrigin
@@ -26,12 +29,74 @@ public class ProbInstMgrCtrl {
     @Autowired
     ExePlanMgrService exePlanMgrService;
 
+    @Autowired
+    ObjectMapper objectMapper;
+
     @PostMapping("/addProblem")
     public void addProbInst(@RequestBody ProbInst probInst) {
         if (probInst == null || !StringUtils.hasText(probInst.getInstName())) {
             throw new IllegalArgumentException("问题实例名称不能为空");
         }
         probInstMgrService.addProbInst(probInst);
+    }
+
+    @PostMapping("/importProblemsJson")
+    public Map<String, Object> importProblemsJson(@RequestBody Map<String, Object> payload, HttpServletRequest request) {
+        String jsonText = payload == null ? "" : String.valueOf(payload.getOrDefault("jsonText", ""));
+        if (!StringUtils.hasText(jsonText)) {
+            return ApiResponse.failed(request, 400, "JSON内容不能为空", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        try {
+            JsonNode root = objectMapper.readTree(jsonText);
+            List<JsonNode> nodes = new ArrayList<>();
+            if (root.isArray()) {
+                root.forEach(nodes::add);
+            } else if (root.isObject() && root.has("items") && root.get("items").isArray()) {
+                root.get("items").forEach(nodes::add);
+            } else if (root.isObject()) {
+                nodes.add(root);
+            } else {
+                return ApiResponse.failed(request, 400, "JSON结构不合法，需为对象、数组或包含items数组的对象", ErrorCode.INVALID_ARGUMENT.code());
+            }
+
+            int success = 0;
+            int skipped = 0;
+            int failed = 0;
+            List<Map<String, Object>> failures = new ArrayList<>();
+            for (int i = 0; i < nodes.size(); i++) {
+                JsonNode item = nodes.get(i);
+                try {
+                    ProbInst probInst = objectMapper.convertValue(item, ProbInst.class);
+                    normalizeProbInst(probInst);
+                    if (probInst == null || !StringUtils.hasText(probInst.getInstName())) {
+                        throw new IllegalArgumentException("instName不能为空");
+                    }
+                    if (probInstMgrService.countProbInstsByInstName(probInst.getInstName()) > 0) {
+                        skipped++;
+                        continue;
+                    }
+                    probInstMgrService.addProbInst(probInst);
+                    success++;
+                } catch (Exception ex) {
+                    failed++;
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("index", i);
+                    row.put("instName", item.has("instName") ? item.get("instName").asText("") : "");
+                    row.put("reason", ex.getMessage());
+                    failures.add(row);
+                }
+            }
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("total", nodes.size());
+            data.put("success", success);
+            data.put("skipped", skipped);
+            data.put("failed", failed);
+            data.put("failures", failures);
+            return ApiResponse.ok(request, data, "问题实例JSON导入完成");
+        } catch (Exception ex) {
+            return ApiResponse.failed(request, 400, "JSON解析失败: " + ex.getMessage(), ErrorCode.INVALID_ARGUMENT.code());
+        }
     }
 
     @PostMapping("/deleteProblemById")
@@ -128,5 +193,22 @@ public class ProbInstMgrCtrl {
         data.put("refPlanCount", refPlanCount);
         data.put("refPlanNames", refPlanNames == null ? Collections.emptyList() : refPlanNames);
         return data;
+    }
+
+    private void normalizeProbInst(ProbInst probInst) {
+        if (probInst == null) {
+            return;
+        }
+        probInst.setInstId(null);
+        probInst.setInstName(trimOrEmpty(probInst.getInstName()));
+        probInst.setCategoryName(trimOrEmpty(probInst.getCategoryName()));
+        probInst.setDirName(trimOrEmpty(probInst.getDirName()));
+        probInst.setMachineName(trimOrEmpty(probInst.getMachineName()));
+        probInst.setMachineIp(trimOrEmpty(probInst.getMachineIp()));
+        probInst.setDescription(trimOrEmpty(probInst.getDescription()));
+    }
+
+    private String trimOrEmpty(String text) {
+        return text == null ? "" : text.trim();
     }
 }

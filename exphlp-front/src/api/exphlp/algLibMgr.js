@@ -95,3 +95,13 @@ export function generateDeployTemplate(algId) {
     }
   });
 }
+
+export function importAlgsJson(jsonText) {
+  return request({
+    url: "/api/AlgController/importAlgsJson",
+    method: "post",
+    data: {
+      jsonText
+    }
+  });
+}

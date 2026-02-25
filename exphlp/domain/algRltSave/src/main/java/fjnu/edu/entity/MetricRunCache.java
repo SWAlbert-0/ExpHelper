@@ -13,8 +13,10 @@ public class MetricRunCache {
     private Integer paretoSize;
     private Double hv;
     private Double igdPlus;
+    private Double gd;
+    private Double coverage;
     private Double spreadDelta;
+    private Double spacing;
     private String metricStatus;
     private String reasonCode;
 }
-

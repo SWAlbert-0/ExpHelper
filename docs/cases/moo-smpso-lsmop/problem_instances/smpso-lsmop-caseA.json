@@ -1,0 +1,9 @@
+﻿{
+    "categoryName":  "moo-lsmop",
+    "instName":  "smpso-lsmop-caseA-ui",
+    "machineIp":  "127.0.0.1",
+    "dirName":  "examples/lsmop/caseA",
+    "machineName":  "local",
+    "description":  "SMPSO large-scale benchmark case A; nVars=500; nObjs=3"
+}
+

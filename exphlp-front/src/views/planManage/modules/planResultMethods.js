@@ -94,4 +94,36 @@ export const planResultMethods = {
     }
     return number.toFixed(6);
   },
+
+  formatCoverageMetric(value) {
+    if (value === undefined || value === null || value === "") {
+      return "N/A（无对比对象）";
+    }
+    return this.formatMetric(value);
+  },
+
+  coverageHintText(detail) {
+    if (!detail) {
+      return "";
+    }
+    const runs = Array.isArray(detail.runs) ? detail.runs : [];
+    if (!runs.length) {
+      return "";
+    }
+    const comparableValues = runs
+      .map((item) => (item ? item.coverage : null))
+      .filter((value) => value !== null && value !== undefined && value !== "");
+    const hasComparable = comparableValues.length > 0;
+    if (!hasComparable) {
+      return "Coverage 为算法间对比指标；当前执行无可比较算法，故显示 N/A（无对比对象）。";
+    }
+    const hasPositiveCoverage = comparableValues.some((value) => {
+      const number = Number(value);
+      return Number.isFinite(number) && number > 0;
+    });
+    if (!hasPositiveCoverage) {
+      return "Coverage=0 表示有可比较算法，但当前算法未覆盖到对方前沿点；这通常是结果分布差异，不是系统错误。";
+    }
+    return "Coverage 表示当前算法对同计划其他算法结果集的覆盖率，值越大通常表示支配能力越强。";
+  },
 };

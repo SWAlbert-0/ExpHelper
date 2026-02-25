@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $docPath = Join-Path $repoRoot "docs/dev/配置清单.md"
@@ -25,16 +25,30 @@ function Collect-Candidates {
   $explicit = @(
     "docker/.env",
     "docker/docker-compose.yml",
+    "docker/alg-runner/Dockerfile",
+    "docker/alg-runner/entrypoint.sh",
     "docker/docker-compose.local-front.yml",
     "docker/frontend/nginx.conf",
     "docker/mongo/mongo-init.js",
+    "scripts/ops.ps1",
+    "scripts/README.md",
+    "scripts/deploy-runtime.ps1",
+    "scripts/bootstrap-runtime.ps1",
+    "scripts/up-alg-services.ps1",
+    "scripts/down-alg-services.ps1",
+    "scripts/check-alg-services.ps1",
+    "scripts/check-runtime-readiness.ps1",
+    "scripts/rebuild-webapp-front.ps1",
     "exphlp-front/.env.development",
     "exphlp-front/.env.staging",
     "exphlp-front/.env.production",
     "exphlp-front/vue.config.js",
-    "docs/examples/moo-nsga2-zdt1/algorithm_service/src/main/resources/application.yml",
-    "docs/examples/moo-nsga2-zdt1/scripts/start-alg-with-nacos.ps1",
-    "docs/examples/moo-nsga2-zdt1/scripts/check-nacos-readiness.ps1"
+    "docs/cases/moo-nsga2-zdt1/algorithm_service/src/main/resources/application.yml",
+    "docs/cases/moo-moead-lsmop/algorithm_service/src/main/resources/application.yml",
+    "docs/cases/moo-smpso-lsmop/algorithm_service/src/main/resources/application.yml",
+    "docs/cases/moo-spea2-lsmop/algorithm_service/src/main/resources/application.yml",
+    "docs/cases/moo-nsga2-zdt1/scripts/start-alg-with-nacos.ps1",
+    "docs/cases/moo-nsga2-zdt1/scripts/check-nacos-readiness.ps1"
   )
   foreach ($item in $explicit) {
     if (Test-Path (Join-Path $repoRoot $item)) {
@@ -74,3 +88,4 @@ if ($missing.Count -gt 0) {
 
 Write-Host "配置清单校验通过，共校验 $($candidates.Count) 项。" -ForegroundColor Green
 exit 0
+

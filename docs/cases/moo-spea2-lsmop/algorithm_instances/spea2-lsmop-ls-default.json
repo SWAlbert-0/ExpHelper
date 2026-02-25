@@ -1,0 +1,43 @@
+{
+  "algName": "spea2-lsmop-ls",
+  "serviceName": "spea2-lsmop-ls",
+  "description": "SPEA2 large-scale LSMOP baseline",
+  "defParas": [
+    {
+      "paraName": "nVars",
+      "paraType": "int",
+      "paraValue": "500",
+      "description": "decision variable dimension"
+    },
+    {
+      "paraName": "populationSize",
+      "paraType": "int",
+      "paraValue": "200",
+      "description": "population size"
+    },
+    {
+      "paraName": "maxGenerations",
+      "paraType": "int",
+      "paraValue": "300",
+      "description": "iteration generations"
+    },
+    {
+      "paraName": "crossoverProbability",
+      "paraType": "double",
+      "paraValue": "0.9",
+      "description": "crossover probability"
+    },
+    {
+      "paraName": "mutationProbability",
+      "paraType": "double",
+      "paraValue": "0.01",
+      "description": "mutation probability"
+    },
+    {
+      "paraName": "seed",
+      "paraType": "long",
+      "paraValue": "20260225",
+      "description": "random seed for reproducibility"
+    }
+  ]
+}

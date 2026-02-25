@@ -51,156 +51,159 @@
           </div>
         </el-aside>
         <el-main class="plan-edit-main">
-          <div class="right-card">
-            <div v-if="rightVisible" style="height: 100%; overflow: auto">
+          <div v-if="rightVisible" class="plan-edit-content">
+            <div class="right-card">
               <el-steps :active="active" finish-status="success" align-center>
                 <el-step title="算法选择及配置"></el-step>
                 <el-step title="通知人员与保存"></el-step>
               </el-steps>
-              <div class="step-nav">
-                <el-button v-show="this.active === 1" style="margin-top: 12px" @click="next">下一步</el-button>
-              </div>
             </div>
-          </div>
-          <div v-show="this.active == 1 && rightVisible">
-            <div class="panel-title">算法选择及配置</div>
-            <el-alert
-              title="说明：‘去算法库新建算法’用于创建新算法记录；‘加入计划’用于将当前下拉选中的算法加入本计划。"
-              type="info"
-              :closable="false"
-              show-icon
-              style="margin-bottom: 12px;"
-            />
-            <el-row :gutter="12" class="alg-select-row">
-              <el-col :span="6">
-                <router-link :to="{ path: '/algorithmConfig/index', query: { source: 'planManage' } }">
-                  <el-button type="success">去算法库新建算法</el-button>
-                </router-link>
-              </el-col>
-              <el-col :span="14">
-                <el-form :inline="true" class="demo-form-inline" align="center">
-                  <el-form-item label="算法">
-                    <el-select
-                      v-model="algId"
-                      placeholder="请选择解决问题的算法"
-                    >
-                      <el-option
-                        v-for="(selectItem, index) in algInfos"
-                        :key="index"
-                        :value="index"
-                        :label="selectItem.algName"
-                      ></el-option>
-                    </el-select>
-                  </el-form-item>
-                </el-form>
-              </el-col>
-              <el-col :span="4">
-                <el-button type="primary" @click="addAlgInfo()">加入计划</el-button>
-              </el-col>
-            </el-row>
-            <br>
-            <el-table
-              :data="exePlan.algRunInfos"
-              border
-              fit
-              highlight-current-row
-            >
-              <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
-              <el-table-column prop="showedAlgName" label="算法名称" width="150" align="center"></el-table-column>
-              <el-table-column prop="description" label="算法描述" align="center"></el-table-column>
-              <el-table-column prop="runNum" label="运行次数" align="center"></el-table-column>
-              <el-table-column label="操作" align="center" width="300">
-                <template slot-scope="scope">
-                  <el-button size="mini" icon="el-icon-edit" @click="openRunParaTable(scope.row)">参数编辑</el-button>
-                  <el-button type="primary" size="mini" icon="el-icon-edit" @click="openRunNumForm(scope.row)">编辑
-                  </el-button>
-                  <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteAlgInfo(scope.row)">删除
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <!--        -->
-            <el-dialog
-              title="编辑"
-              :visible.sync="dialogRunNumFormVisible"
-              width="30%"
-              align="center"
-              :close-on-click-modal="false"
-            >
-              <el-form :model="runNumForm" ref="runNumForm" label-width="80px">
-                <el-form-item label="运行次数" prop="runNum"
-                              :rules="{required: true, message: '请输入运行次数', trigger: 'blur'}">
-                  <el-input v-model="runNumForm.runNum" placeholder="请输入运行次数"></el-input>
-                </el-form-item>
-              </el-form>
-              <div>
-                <el-button @click="closeRunNumForm('runNumForm')">取 消</el-button>
-                <el-button type="primary" @click="submitRunNumForm('runNumForm')">确 定</el-button>
-              </div>
-            </el-dialog>
-            <!--        -->
-            <el-dialog
-              title="参数列表"
-              :visible.sync="dialogRunParaTableVisible"
-              center
-              width="60%"
-              :before-close="beforeCloseRunParaTable"
-              :close-on-click-modal="false"
-            >
-              <el-table :data="runParaTable" ref="runParaTable" border fit highlight-current-row>
-                <el-table-column property="paraId" label="序号" width="100" align="center"></el-table-column>
-                <el-table-column property="paraName" label="参数名" width="100" align="center"></el-table-column>
-                <el-table-column property="paraType" label="参数类型" width="100" align="center"></el-table-column>
-                <el-table-column property="paraValue" label="参数值" width="100" align="center"></el-table-column>
-                <el-table-column property="description" label="描述" align="center"></el-table-column>
-                <el-table-column label="操作" align="center" width="200">
+            <div v-show="this.active == 1 && rightVisible">
+              <div class="panel-title">算法选择及配置</div>
+              <el-alert
+                title="说明：‘去算法库新建算法’用于创建新算法记录；‘加入计划’用于将当前下拉选中的算法加入本计划。"
+                type="info"
+                :closable="false"
+                show-icon
+                style="margin-bottom: 12px;"
+              />
+              <el-row :gutter="12" class="alg-select-row">
+                <el-col :span="6">
+                  <router-link :to="{ path: '/algorithmConfig/index', query: { source: 'planManage' } }">
+                    <el-button type="success">去算法库新建算法</el-button>
+                  </router-link>
+                </el-col>
+                <el-col :span="14">
+                  <el-form :inline="true" class="demo-form-inline" align="center">
+                    <el-form-item label="算法">
+                      <el-select
+                        v-model="algId"
+                        placeholder="请选择解决问题的算法"
+                      >
+                        <el-option
+                          v-for="(selectItem, index) in algInfos"
+                          :key="index"
+                          :value="index"
+                          :label="selectItem.algName"
+                        ></el-option>
+                      </el-select>
+                    </el-form-item>
+                  </el-form>
+                </el-col>
+                <el-col :span="4">
+                  <el-button type="primary" @click="addAlgInfo()">加入计划</el-button>
+                </el-col>
+              </el-row>
+              <br>
+              <el-table
+                :data="exePlan.algRunInfos"
+                border
+                fit
+                highlight-current-row
+              >
+                <el-table-column type="index" label="序号" width="60" align="center"></el-table-column>
+                <el-table-column prop="showedAlgName" label="算法名称" width="150" align="center"></el-table-column>
+                <el-table-column prop="description" label="算法描述" align="center"></el-table-column>
+                <el-table-column prop="runNum" label="运行次数" align="center"></el-table-column>
+                <el-table-column label="操作" align="center" width="300">
                   <template slot-scope="scope">
-                    <el-button type="primary" size="mini" icon="el-icon-edit" @click="openRunParaForm(scope.row)">编辑
+                    <el-button size="mini" icon="el-icon-edit" @click="openRunParaTable(scope.row)">参数编辑</el-button>
+                    <el-button type="primary" size="mini" icon="el-icon-edit" @click="openRunNumForm(scope.row)">编辑
+                    </el-button>
+                    <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteAlgInfo(scope.row)">删除
                     </el-button>
                   </template>
                 </el-table-column>
               </el-table>
               <!--        -->
               <el-dialog
-                width="30%"
-                center
                 title="编辑"
-                :visible.sync="dialogRunParaFormVisible"
-                append-to-body
+                :visible.sync="dialogRunNumFormVisible"
+                width="30%"
+                align="center"
                 :close-on-click-modal="false"
               >
-                <el-form :model="runParaForm" ref="runParaForm" label-width="80px">
-                  <el-form-item label="参数值" prop="paraValue"
-                                :rules="{ required: true, message: '请输入参数值', trigger: 'blur' }">
-                    <el-input v-model="runParaForm.paraValue" placeholder="请输入参数值"></el-input>
+                <el-form :model="runNumForm" ref="runNumForm" label-width="80px">
+                  <el-form-item label="运行次数" prop="runNum"
+                                :rules="{required: true, message: '请输入运行次数', trigger: 'blur'}">
+                    <el-input v-model="runNumForm.runNum" placeholder="请输入运行次数"></el-input>
                   </el-form-item>
                 </el-form>
-                <span slot="footer" class="dialog-footer">
-          <el-button @click="closeRunParaForm('runParaForm')">取 消</el-button>
-          <el-button type="primary" @click="submitRunParaForm('runParaForm')">确 定</el-button>
-        </span>
+                <div>
+                  <el-button @click="closeRunNumForm('runNumForm')">取 消</el-button>
+                  <el-button type="primary" @click="submitRunNumForm('runNumForm')">确 定</el-button>
+                </div>
               </el-dialog>
-            </el-dialog>
+              <!--        -->
+              <el-dialog
+                title="参数列表"
+                :visible.sync="dialogRunParaTableVisible"
+                center
+                width="60%"
+                :before-close="beforeCloseRunParaTable"
+                :close-on-click-modal="false"
+              >
+                <el-table :data="runParaTable" ref="runParaTable" border fit highlight-current-row>
+                  <el-table-column property="paraId" label="序号" width="100" align="center"></el-table-column>
+                  <el-table-column property="paraName" label="参数名" width="100" align="center"></el-table-column>
+                  <el-table-column property="paraType" label="参数类型" width="100" align="center"></el-table-column>
+                  <el-table-column property="paraValue" label="参数值" width="100" align="center"></el-table-column>
+                  <el-table-column property="description" label="描述" align="center"></el-table-column>
+                  <el-table-column label="操作" align="center" width="200">
+                    <template slot-scope="scope">
+                      <el-button type="primary" size="mini" icon="el-icon-edit" @click="openRunParaForm(scope.row)">编辑
+                      </el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <!--        -->
+                <el-dialog
+                  width="30%"
+                  center
+                  title="编辑"
+                  :visible.sync="dialogRunParaFormVisible"
+                  append-to-body
+                  :close-on-click-modal="false"
+                >
+                  <el-form :model="runParaForm" ref="runParaForm" label-width="80px">
+                    <el-form-item label="参数值" prop="paraValue"
+                                  :rules="{ required: true, message: '请输入参数值', trigger: 'blur' }">
+                      <el-input v-model="runParaForm.paraValue" placeholder="请输入参数值"></el-input>
+                    </el-form-item>
+                  </el-form>
+                  <span slot="footer" class="dialog-footer">
+            <el-button @click="closeRunParaForm('runParaForm')">取 消</el-button>
+            <el-button type="primary" @click="submitRunParaForm('runParaForm')">确 定</el-button>
+          </span>
+                </el-dialog>
+              </el-dialog>
+            </div>
+            <div v-show="this.active == 2 && rightVisible">
+              <div class="panel-title">通知人员与保存</div>
+              <el-table
+                :data="userInfos"
+                border
+                fit
+                highlight-current-row
+                ref="userInfos"
+                @selection-change="handleSelectionChange2"
+              >
+                <el-table-column type="selection" width="60" align="center"></el-table-column>
+                <el-table-column prop="userName" label="姓名" width="150" align="center"></el-table-column>
+                <el-table-column prop="email" label="邮箱" align="center"></el-table-column>
+                <el-table-column prop="wechat" label="微信" align="center"></el-table-column>
+              </el-table>
+            </div>
           </div>
-
-          <div v-show="this.active == 2 && rightVisible">
-            <div class="panel-title">通知人员与保存</div>
-            <el-table
-              :data="userInfos"
-              border
-              fit
-              highlight-current-row
-              ref="userInfos"
-              @selection-change="handleSelectionChange2"
-            >
-              <el-table-column type="selection" width="60" align="center"></el-table-column>
-              <el-table-column prop="userName" label="姓名" width="150" align="center"></el-table-column>
-              <el-table-column prop="email" label="邮箱" align="center"></el-table-column>
-              <el-table-column prop="wechat" label="微信" align="center"></el-table-column>
-            </el-table>
-            <div class="submit-row">
-              <el-button @click="prev">上一步</el-button>
-              <el-button type="primary" @click="submitExePlan()">保存计划</el-button>
+          <div v-if="rightVisible" class="plan-edit-footer-actions">
+            <div class="footer-step-tip">
+              当前步骤：{{ active === 1 ? "算法选择及配置" : (active === 2 ? "通知人员与保存" : "-") }}
+            </div>
+            <div class="footer-actions-right">
+              <el-button @click="backToExePlanTable()">返回列表</el-button>
+              <el-button v-show="this.active === 2" @click="prev">上一步</el-button>
+              <el-button v-show="this.active === 1" type="primary" @click="next">下一步</el-button>
+              <el-button v-show="this.active === 2" type="primary" @click="submitExePlan()">保存计划</el-button>
             </div>
           </div>
         </el-main>
@@ -231,8 +234,8 @@
             @selection-change="handleSelectionChange1"
           >
             <el-table-column type="selection" width="60" align="center"></el-table-column>
-            <el-table-column prop="planId" label="计划ID" width="220" align="center"></el-table-column>
             <el-table-column prop="planName" label="计划名称" align="center"></el-table-column>
+            <el-table-column prop="planScale" label="规模(实例/算法)" width="130" align="center"></el-table-column>
             <el-table-column prop="exeStartTime" label="开始时间" width="170" align="center"></el-table-column>
             <el-table-column prop="exeEndTime" label="结束时间" width="170" align="center"></el-table-column>
             <el-table-column prop="exeState" label="执行状态" width="100" align="center"></el-table-column>
@@ -394,9 +397,20 @@
               <el-descriptions-item label="Runtime(ms)">{{ formatMetric(exeResultDetail.aggregate.runtimeMsMean) }}</el-descriptions-item>
               <el-descriptions-item label="HV">{{ formatMetric(exeResultDetail.aggregate.hvMean) }}</el-descriptions-item>
               <el-descriptions-item label="IGD+">{{ formatMetric(exeResultDetail.aggregate.igdPlusMean) }}</el-descriptions-item>
+              <el-descriptions-item label="GD">{{ formatMetric(exeResultDetail.aggregate.gdMean) }}</el-descriptions-item>
+              <el-descriptions-item label="Coverage">{{ formatCoverageMetric(exeResultDetail.aggregate.coverageMean) }}</el-descriptions-item>
               <el-descriptions-item label="Spread(Δ)">{{ formatMetric(exeResultDetail.aggregate.spreadDeltaMean) }}</el-descriptions-item>
+              <el-descriptions-item label="Spacing">{{ formatMetric(exeResultDetail.aggregate.spacingMean) }}</el-descriptions-item>
               <el-descriptions-item label="指标版本">{{ exeResultDetail.metricVersion || '-' }}</el-descriptions-item>
             </el-descriptions>
+            <el-alert
+              v-if="coverageHintText()"
+              :title="coverageHintText()"
+              type="info"
+              :closable="false"
+              show-icon
+              style="margin-bottom: 12px;"
+            />
             <el-table :data="exeResultsTable" border fit highlight-current-row>
               <el-table-column property="runIndex" label="run" width="70" align="center"></el-table-column>
               <el-table-column property="probInstName" label="问题实例" min-width="120" align="center"></el-table-column>
@@ -408,8 +422,17 @@
               <el-table-column label="IGD+" width="100" align="center">
                 <template slot-scope="scope">{{ formatMetric(scope.row.igdPlus) }}</template>
               </el-table-column>
+              <el-table-column label="GD" width="100" align="center">
+                <template slot-scope="scope">{{ formatMetric(scope.row.gd) }}</template>
+              </el-table-column>
+              <el-table-column label="Coverage" width="110" align="center">
+                <template slot-scope="scope">{{ formatCoverageMetric(scope.row.coverage) }}</template>
+              </el-table-column>
               <el-table-column label="Spread(Δ)" width="110" align="center">
                 <template slot-scope="scope">{{ formatMetric(scope.row.spreadDelta) }}</template>
+              </el-table-column>
+              <el-table-column label="Spacing" width="110" align="center">
+                <template slot-scope="scope">{{ formatMetric(scope.row.spacing) }}</template>
               </el-table-column>
               <el-table-column property="metricStatus" label="指标状态" width="100" align="center"></el-table-column>
               <el-table-column property="reasonCode" label="原因码" width="160" align="center" show-overflow-tooltip></el-table-column>
@@ -581,7 +604,7 @@ import { planExecutionMethods } from "@/views/planManage/modules/planExecutionMe
 import { planDeleteMethods } from "@/views/planManage/modules/planDeleteMethods";
 import {
   formatTimestampToDateTime as formatTs,
-  getCurrentDateTime as getNowText,
+  normalizeToEpochMsOrZero,
   buildProbInstsTreeData as buildTreeData,
   getCheckedProbInstIds,
   handleSameAlgName as buildAlgDisplayNames,
@@ -712,11 +735,20 @@ export default {
     this.getUserInfos();
     this.getExePlans();
     this.countAllExePlans();
+    this.ensureViewState();
+  },
+  activated() {
+    this.ensureViewState();
   },
   beforeDestroy() {
     this.stopPlanLogPolling();
   },
   methods: {
+    ensureViewState() {
+      if (!this.editVisible && !this.viewVisible && !this.showExePlanTableVisible) {
+        this.showExePlanTableVisible = true;
+      }
+    },
     listProbInsts() {
       getProbInstList(this.pageOne, this.totalSize).then(res => {
         this.probInsts = res;
@@ -840,6 +872,8 @@ export default {
       for (var i = 0; i < showedAlgName.length; i++) {
         this.exePlan.algRunInfos[i].showedAlgName = showedAlgName[i];
       }
+      // 删除后立即刷新重复参数状态，避免提交时读取到旧缓存值。
+      this.hasDuplicateParas();
     },
     submitExePlan() {
       this.exePlan.userIds = [];
@@ -861,11 +895,12 @@ export default {
               }
             }
             if (flag == true) {
-              if(this.duplicateParaFlag){
+              if(this.hasDuplicateParas()){
                 this.$message({type: "warning", message: "相同算法存在相同的运行参数，请修改运行参数后再提交",});
               }else {
-                this.exePlan.exeStartTime = new Date(this.exePlan.exeStartTime).getTime();
-                this.exePlan.exeEndTime = new Date(this.exePlan.exeEndTime).getTime();
+                this.warnHighCostParas(this.exePlan.algRunInfos);
+                this.exePlan.exeStartTime = normalizeToEpochMsOrZero(this.exePlan.exeStartTime);
+                this.exePlan.exeEndTime = normalizeToEpochMsOrZero(this.exePlan.exeEndTime);
                 this.exePlan.probInstIds = this.getCheckedNodes();
                 this.exePlan.exeState = 1;
                 addExePlan(this.exePlan)
@@ -895,23 +930,26 @@ export default {
           }
         }
         if (flag == true) {
-          for (var i = 0; i < this.options.length; i++) {
-            if (this.exePlan.exeState == this.options[i].value) {
-              this.exePlan.exeState = i + 1;
-              break;
+          if (this.hasDuplicateParas()) {
+            this.$message({type: "warning", message: "相同算法存在相同的运行参数，请修改运行参数后再提交",});
+          } else {
+            this.warnHighCostParas(this.exePlan.algRunInfos);
+            for (var i = 0; i < this.options.length; i++) {
+              if (this.exePlan.exeState == this.options[i].value) {
+                this.exePlan.exeState = i + 1;
+                break;
+              }
             }
+            this.exePlan.exeStartTime = normalizeToEpochMsOrZero(this.exePlan.exeStartTime);
+            this.exePlan.exeEndTime = normalizeToEpochMsOrZero(this.exePlan.exeEndTime);
+            updateExePlanById(this.exePlan)
+              .then(res => {
+                this.$message({type: "success", message: "编辑成功",});
+                this.editVisible = false;
+                this.showExePlanTableVisible = true;
+                this.clearSearchCondition();
+              });
           }
-          var dateObject1 = new Date(this.exePlan.exeStartTime);
-          var dateObject2 = new Date(this.exePlan.exeEndTime);
-          this.exePlan.exeStartTime = dateObject1.getTime();
-          this.exePlan.exeEndTime = dateObject2.getTime();
-          updateExePlanById(this.exePlan)
-            .then(res => {
-              this.$message({type: "success", message: "编辑成功",});
-              this.editVisible = false;
-              this.showExePlanTableVisible = true;
-              this.clearSearchCondition();
-            });
         }
       }
 
@@ -920,11 +958,7 @@ export default {
     getExePlans() {
       getExePlans(this.pageHelper.currentPageNum, this.pageHelper.pageSize).then(res => {
         this.exePlans = res;
-        for (var i = 0; i < this.exePlans.length; i++) {
-          this.exePlans[i].exeState = this.options[this.exePlans[i].exeState - 1].value;
-          this.exePlans[i].exeStartTime = this.formatTimestampToDateTime(this.exePlans[i].exeStartTime);
-          this.exePlans[i].exeEndTime = this.formatTimestampToDateTime(this.exePlans[i].exeEndTime);
-        }
+        for (var i = 0; i < this.exePlans.length; i++) this.decoratePlanRow(this.exePlans[i]);
         this.countAllExePlans();
       });
     },
@@ -936,21 +970,7 @@ export default {
       this.exePlans = [];
       getExePlanByName(this.search.planName).then(res => {
         if (res != '') {
-          if (res.exeState == '') {
-            res.exeState = '未执行';
-          } else {
-            res.exeState = this.options[res.exeState - 1].value;
-          }
-          if (res.exeStartTime == 0) {
-            res.exeStartTime = '';
-          } else {
-            res.exeStartTime = this.formatTimestampToDateTime(res.exeStartTime);
-          }
-          if (res.exeEndTime == 0) {
-            res.exeEndTime = '';
-          } else {
-            res.exeEndTime = this.formatTimestampToDateTime(res.exeEndTime);
-          }
+          this.decoratePlanRow(res);
           this.pageHelper.totalSize = 1;
           this.exePlans.push(res);
         } else {
@@ -961,26 +981,14 @@ export default {
     clearSearchCondition() {
       this.pageHelper.currentPageNum = 1;
       this.pageHelper.pageSize = 10;
-      this.$refs.userInfos.clearSelection();
+      if (this.$refs.userInfos && typeof this.$refs.userInfos.clearSelection === "function") {
+        this.$refs.userInfos.clearSelection();
+      }
       this.countAllExePlans();
       getExePlans(this.pageHelper.currentPageNum, this.pageHelper.pageSize).then(res => {
         this.exePlans = res;
         for (var i = 0; i < this.exePlans.length; i++) {
-          if (this.exePlans[i].exeState == '') {
-            this.exePlans[i].exeState = '未执行';
-          } else {
-            this.exePlans[i].exeState = this.options[this.exePlans[i].exeState - 1].value;
-          }
-          if (this.exePlans[i].exeStartTime == 0) {
-            this.exePlans[i].exeStartTime = '';
-          } else {
-            this.exePlans[i].exeStartTime = this.formatTimestampToDateTime(this.exePlans[i].exeStartTime);
-          }
-          if (this.exePlans[i].exeEndTime == 0) {
-            this.exePlans[i].exeEndTime = '';
-          } else {
-            this.exePlans[i].exeEndTime = this.formatTimestampToDateTime(this.exePlans[i].exeEndTime);
-          }
+          this.decoratePlanRow(this.exePlans[i]);
         }
       });
       this.search = {
@@ -991,15 +999,14 @@ export default {
       };
     },
     addExePlan() {
-      var currentDateTime = this.getCurrentDateTime();
       this.algId = '';
       this.exePlan = {
         planName: '',
         probInsts: [],
         probInstIds: [],
         exeState: '',
-        exeStartTime: currentDateTime,
-        exeEndTime: currentDateTime,
+        exeStartTime: '--',
+        exeEndTime: '--',
         userIds: [],
         description: '',
         algRunInfos: [],
@@ -1083,6 +1090,12 @@ export default {
     },
     formatMetric(value) {
       return planResultMethods.formatMetric.call(this, value);
+    },
+    formatCoverageMetric(value) {
+      return planResultMethods.formatCoverageMetric.call(this, value);
+    },
+    coverageHintText() {
+      return planResultMethods.coverageHintText.call(this, this.exeResultDetail);
     },
     openPlanLogsDialog() {
       return planLogMethods.openPlanLogsDialog.call(this);
@@ -1238,11 +1251,17 @@ export default {
     },
     backToExePlanTable() {
       this.algId = '';
-      this.$refs['exePlan'].clearValidate();
-      this.$refs.userInfos.clearSelection();
+      if (this.$refs['exePlan'] && typeof this.$refs['exePlan'].clearValidate === "function") {
+        this.$refs['exePlan'].clearValidate();
+      }
+      if (this.$refs.userInfos && typeof this.$refs.userInfos.clearSelection === "function") {
+        this.$refs.userInfos.clearSelection();
+      }
       this.clearSearchCondition();
       this.editVisible = false;
-      this.showExePlanTableVisible = true
+      this.viewVisible = false;
+      this.showExePlanTableVisible = true;
+      this.ensureViewState();
     },
     handleSizeChange(val) {
       this.pageHelper.pageSize = val
@@ -1294,8 +1313,66 @@ export default {
     formatTimestampToDateTime(timestamp) {
       return formatTs(timestamp);
     },
-    getCurrentDateTime() {
-      return getNowText();
+    decoratePlanRow(row) {
+      if (!row) return row;
+      const rawState = row.exeState;
+      if (rawState === "" || rawState === null || rawState === undefined) {
+        row.exeState = "未执行";
+      } else if (typeof rawState === "number") {
+        row.exeState = (this.options[rawState - 1] || {}).value || String(rawState);
+      } else if (/^\d+$/.test(String(rawState))) {
+        const idx = Number(rawState);
+        row.exeState = (this.options[idx - 1] || {}).value || String(rawState);
+      }
+      row.exeStartTime = this.formatTimestampToDateTime(row.exeStartTime);
+      row.exeEndTime = this.formatTimestampToDateTime(row.exeEndTime);
+      row.planScale = this.buildPlanScale(row);
+      return row;
+    },
+    buildPlanScale(row) {
+      const probCount = Array.isArray(row && row.probInstIds) ? row.probInstIds.length : 0;
+      const algCount = Array.isArray(row && row.algRunInfos) ? row.algRunInfos.length : 0;
+      if (probCount === 0 && algCount === 0) {
+        return "--";
+      }
+      return `${probCount}/${algCount}`;
+    },
+    warnHighCostParas(algRunInfos) {
+      if (!Array.isArray(algRunInfos) || algRunInfos.length === 0) {
+        return;
+      }
+      for (let i = 0; i < algRunInfos.length; i++) {
+        const info = algRunInfos[i] || {};
+        const paraMap = {};
+        const runParas = Array.isArray(info.runParas) ? info.runParas : [];
+        for (let j = 0; j < runParas.length; j++) {
+          const para = runParas[j] || {};
+          if (para.paraName) {
+            paraMap[String(para.paraName)] = para.paraValue;
+          }
+        }
+        const pop = Number(paraMap.populationSize || 0);
+        const gen = Number(paraMap.maxGenerations || 0);
+        const nVars = Number(paraMap.nVars || 0);
+        const runNum = Number(info.runNum || 0);
+        const workLoad = pop * gen * Math.max(runNum, 1);
+        if (Number.isFinite(workLoad) && workLoad >= 2000000) {
+          this.$message({
+            type: "warning",
+            duration: 8000,
+            message: `算法[${info.algName || "--"}]参数计算量较大（populationSize*maxGenerations*runNum=${workLoad}），若出现超时请降低参数或提高后端ALG_CALL_READ_TIMEOUT_MS`
+          });
+          return;
+        }
+        if (Number.isFinite(nVars) && nVars > 1000) {
+          this.$message({
+            type: "warning",
+            duration: 8000,
+            message: `算法[${info.algName || "--"}]的nVars=${nVars}偏大，建议先做小规模验证后再放大`
+          });
+          return;
+        }
+      }
     },
     buildProbInstsTreeData(probInsts) {
       return buildTreeData(probInsts);
@@ -1346,8 +1423,11 @@ export default {
 
 .plan-edit-main {
   text-align: left;
-  padding: 16px;
+  padding: 16px 16px 0 16px;
   background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .plan-edit-form {
@@ -1364,16 +1444,41 @@ export default {
 
 .right-card {
   padding: 8px 0 4px 0;
+  margin-bottom: 12px;
 }
 
-.step-nav {
-  margin-top: 8px;
+.plan-edit-content {
+  flex: 1;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .submit-row {
   margin-top: 14px;
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.plan-edit-footer-actions {
+  border-top: 1px solid #ebeef5;
+  background: #fff;
+  padding: 10px 2px 12px 2px;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.footer-step-tip {
+  color: #606266;
+  font-size: 13px;
+}
+
+.footer-actions-right {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
@@ -1601,6 +1706,18 @@ export default {
 
   .view-section-card {
     padding: 10px;
+  }
+
+  .plan-edit-footer-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .footer-actions-right {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
   }
 
   .log-toolbar {

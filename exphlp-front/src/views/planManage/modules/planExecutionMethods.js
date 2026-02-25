@@ -1,4 +1,4 @@
-import { execute, preCheck } from "@/api/exphlp/exePlanMgr";
+﻿import { execute, preCheck } from "@/api/exphlp/exePlanMgr";
 
 export const planExecutionMethods = {
   doExePlan(scope) {
@@ -66,7 +66,7 @@ export const planExecutionMethods = {
     const diagnosis = first && first.diagnosis ? first.diagnosis : "";
     const code = resp && resp.errorCode ? resp.errorCode : "";
     const quickStart = (code === "ALG_SERVICE_NO_INSTANCE" || code === "NACOS_UNREACHABLE")
-      ? "可先执行：powershell -ExecutionPolicy Bypass -File docs/examples/moo-nsga2-zdt1/scripts/start-alg-with-nacos.ps1"
+      ? "可先执行：powershell -ExecutionPolicy Bypass -File docs/cases/moo-nsga2-zdt1/scripts/start-alg-with-nacos.ps1"
       : "";
     const detail = [msg, diagnosis, suggestion, quickStart].filter(Boolean).join("；");
     this.$alert(detail, "执行前检查未通过", {
@@ -91,4 +91,5 @@ export const planExecutionMethods = {
     });
   },
 };
+
 

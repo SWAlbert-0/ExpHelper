@@ -16,7 +16,7 @@ public class NacoaMain {
     @LoadBalanced
     RestTemplate restTemplate(
             @org.springframework.beans.factory.annotation.Value("${alg.call.connect-timeout-ms:3000}") int connectTimeout,
-            @org.springframework.beans.factory.annotation.Value("${alg.call.read-timeout-ms:10000}") int readTimeout
+            @org.springframework.beans.factory.annotation.Value("${alg.call.read-timeout-ms:60000}") int readTimeout
     ){
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(connectTimeout);

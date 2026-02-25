@@ -8,7 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +31,7 @@ class AlgLibMgrCtrlTest {
         exePlanMgrService = mock(ExePlanMgrService.class);
         ReflectionTestUtils.setField(controller, "algLibMgrService", algLibMgrService);
         ReflectionTestUtils.setField(controller, "exePlanMgrService", exePlanMgrService);
+        ReflectionTestUtils.setField(controller, "objectMapper", new ObjectMapper());
     }
 
     @Test
@@ -144,5 +147,30 @@ class AlgLibMgrCtrlTest {
         assertEquals(200, response.get("code"));
         Map<String, Object> data = (Map<String, Object>) response.get("data");
         assertEquals("nsga2-zdt1-ls", data.get("serviceName"));
+    }
+
+    @Test
+    void importAlgsJsonReturns200() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("jsonText", "[{\"algName\":\"demo-alg-a\",\"serviceName\":\"demo-alg-a\",\"description\":\"demo\"}]");
+        when(algLibMgrService.getAlgInfoByName("demo-alg-a")).thenReturn(null);
+
+        Map<String, Object> response = controller.importAlgsJson(payload, new MockHttpServletRequest());
+
+        assertEquals(200, response.get("code"));
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        assertEquals(1, data.get("success"));
+        assertEquals(0, data.get("failed"));
+    }
+
+    @Test
+    void importAlgsJsonReturns400WhenJsonInvalid() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("jsonText", "{bad-json");
+
+        Map<String, Object> response = controller.importAlgsJson(payload, new MockHttpServletRequest());
+
+        assertEquals(400, response.get("code"));
+        assertEquals("INVALID_ARGUMENT", response.get("errorCode"));
     }
 }

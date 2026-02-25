@@ -7,7 +7,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,6 +30,7 @@ class ProbInstMgrCtrlTest {
         exePlanMgrService = mock(ExePlanMgrService.class);
         ReflectionTestUtils.setField(controller, "probInstMgrService", probInstMgrService);
         ReflectionTestUtils.setField(controller, "exePlanMgrService", exePlanMgrService);
+        ReflectionTestUtils.setField(controller, "objectMapper", new ObjectMapper());
     }
 
     @Test
@@ -102,5 +105,30 @@ class ProbInstMgrCtrlTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> controller.delProbInstByID(" ", new MockHttpServletRequest()));
         assertEquals("问题实例ID不能为空", ex.getMessage());
+    }
+
+    @Test
+    void importProblemsJsonReturns200() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("jsonText", "[{\"instName\":\"demo-prob-a\",\"categoryName\":\"moo-zdt1\"}]");
+        when(probInstMgrService.countProbInstsByInstName("demo-prob-a")).thenReturn(0L);
+
+        Map<String, Object> response = controller.importProblemsJson(payload, new MockHttpServletRequest());
+
+        assertEquals(200, response.get("code"));
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        assertEquals(1, data.get("success"));
+        assertEquals(0, data.get("failed"));
+    }
+
+    @Test
+    void importProblemsJsonReturns400WhenJsonInvalid() {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("jsonText", "{bad-json");
+
+        Map<String, Object> response = controller.importProblemsJson(payload, new MockHttpServletRequest());
+
+        assertEquals(400, response.get("code"));
+        assertEquals("INVALID_ARGUMENT", response.get("errorCode"));
     }
 }

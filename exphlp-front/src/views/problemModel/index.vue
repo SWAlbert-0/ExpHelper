@@ -13,9 +13,12 @@
         <el-button type="success" icon="el-icon-plus" @click="addForm()">添加</el-button>
       </el-col>
       <el-col :span="2">
+        <el-button type="primary" icon="el-icon-upload2" @click="openImportDialog()">JSON导入</el-button>
+      </el-col>
+      <el-col :span="2">
         <el-button type="danger" icon="el-icon-delete" :loading="batchDeleteLoading" @click="deleteBatch()">批量删除</el-button>
       </el-col>
-      <el-col :span="20">
+      <el-col :span="18">
         <el-form :inline="true" class="demo-form-inline" align="center">
           <el-form-item>
             <el-input v-model="instName" placeholder="请输入实例名" clearable/>
@@ -36,9 +39,12 @@
     >
       <!-- 多选框 -->
       <el-table-column type="selection" width="60" align="center"></el-table-column>
-      <el-table-column prop="instId" label="实例ID" width="210" align="center"></el-table-column>
-      <el-table-column prop="instName" label="实例名称" width="250" align="center"></el-table-column>
-      <el-table-column prop="description" label="实例描述" align="center"></el-table-column>
+      <el-table-column prop="instName" label="实例名称" width="220" align="center"></el-table-column>
+      <el-table-column prop="categoryName" label="类别" width="140" align="center"></el-table-column>
+      <el-table-column prop="dirName" label="目录" width="220" align="center" show-overflow-tooltip></el-table-column>
+      <el-table-column prop="machineName" label="机器名称" width="140" align="center"></el-table-column>
+      <el-table-column prop="machineIp" label="IP地址" width="140" align="center"></el-table-column>
+      <el-table-column prop="description" label="实例描述" align="center" show-overflow-tooltip></el-table-column>
       <el-table-column label="操作" align="center" width="350">
         <template slot-scope="scope">
           <el-button type="primary" size="mini" icon="el-icon-view" @click="getForm(scope.row)">查看</el-button>
@@ -111,6 +117,63 @@
         <el-button type="primary" :loading="submitLoading" @click="submit('form')">确 定</el-button>
       </div>
     </el-dialog>
+    <el-dialog
+      title="问题实例 JSON 导入"
+      :visible.sync="dialogImportVisible"
+      width="46%"
+      align="center"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        title="支持拖拽 .json 文件或粘贴JSON。系统会自动映射旧字段（probName/probDesc 等）。"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 10px;"
+      />
+      <div
+        class="import-dropzone"
+        @click="triggerImportFileSelect"
+        @dragover.prevent
+        @drop.prevent="handleImportFileDrop"
+      >
+        <i class="el-icon-upload2"></i>
+        <span>{{ importFileName ? `已选择: ${importFileName}` : "拖拽 JSON 文件到此处，或点击选择文件" }}</span>
+      </div>
+      <input
+        ref="importFileInput"
+        type="file"
+        accept=".json,application/json"
+        class="import-file-input"
+        @change="handleImportFileChange"
+      />
+      <el-alert
+        v-if="importSummary.total > 0"
+        :title="`解析 ${importSummary.total} 项，标准化 ${importSummary.normalized} 项，兼容映射 ${importSummary.legacyMappedCount} 项`"
+        :type="importSummary.errors.length > 0 ? 'error' : 'success'"
+        :closable="false"
+        show-icon
+        style="margin: 10px 0;"
+      />
+      <el-alert
+        v-if="importSummary.warnings.length > 0"
+        :title="`告警：${importSummary.warnings[0]}`"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 10px;"
+      />
+      <el-input
+        type="textarea"
+        :rows="14"
+        v-model="importJsonText"
+        placeholder='示例：[{"instName":"zdt1-caseA","categoryName":"moo-zdt1","dirName":"cases/zdt1/caseA","machineName":"local","machineIp":"127.0.0.1","description":"demo"}]'
+      ></el-input>
+      <div style="margin-top: 12px; text-align: right;">
+        <el-button @click="dialogImportVisible=false">取消</el-button>
+        <el-button type="primary" :loading="importLoading" @click="submitImportJson">开始导入</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -123,8 +186,10 @@ import {
   updateProbInstById,
   deleteProbInstById,
   countAllProbInsts,
-  countProbInstsByInstName
+  countProbInstsByInstName,
+  importProbInstsJson
 } from "@/api/exphlp/probInstMgr";
+import { normalizeProblemImportJson } from "@/utils/jsonImportNormalizer";
 
 export default {
 
@@ -138,6 +203,17 @@ export default {
       canEdit: false,
       tableLoading: false,
       submitLoading: false,
+      dialogImportVisible: false,
+      importJsonText: "",
+      importLoading: false,
+      importFileName: "",
+      importSummary: {
+        total: 0,
+        normalized: 0,
+        legacyMappedCount: 0,
+        warnings: [],
+        errors: [],
+      },
       title: "",
       instName: '',
       form: {
@@ -280,6 +356,120 @@ export default {
       this.dialogVisible = true;
       this.canEdit = true;
       this.title = '添加';
+    },
+    openImportDialog() {
+      this.importJsonText = "";
+      this.importFileName = "";
+      this.importSummary = {
+        total: 0,
+        normalized: 0,
+        legacyMappedCount: 0,
+        warnings: [],
+        errors: [],
+      };
+      this.dialogImportVisible = true;
+    },
+    triggerImportFileSelect() {
+      if (!this.$refs.importFileInput) {
+        return;
+      }
+      this.$refs.importFileInput.click();
+    },
+    handleImportFileDrop(event) {
+      const file = event && event.dataTransfer && event.dataTransfer.files
+        ? event.dataTransfer.files[0]
+        : null;
+      this.readImportFile(file);
+    },
+    handleImportFileChange(event) {
+      const file = event && event.target && event.target.files ? event.target.files[0] : null;
+      this.readImportFile(file);
+      if (this.$refs.importFileInput) {
+        this.$refs.importFileInput.value = "";
+      }
+    },
+    readImportFile(file) {
+      if (!file) {
+        return;
+      }
+      if (!/\.json$/i.test(file.name)) {
+        this.$message({ type: "warning", message: "仅支持 .json 文件" });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.applyImportJsonText(reader.result || "", file.name);
+      };
+      reader.onerror = () => {
+        this.$message({ type: "error", message: "读取文件失败，请重试" });
+      };
+      reader.readAsText(file, "utf-8");
+    },
+    applyImportJsonText(rawText, fileName) {
+      try {
+        const normalized = normalizeProblemImportJson(rawText);
+        this.importJsonText = normalized.jsonText;
+        this.importSummary = normalized.summary;
+        this.importFileName = fileName || "";
+        if (normalized.summary.errors.length > 0) {
+          this.$message({ type: "warning", message: `文件解析完成，但存在 ${normalized.summary.errors.length} 条错误` });
+          return;
+        }
+        this.$message({ type: "success", message: "JSON 已标准化，可直接导入" });
+      } catch (error) {
+        this.importSummary = {
+          total: 0,
+          normalized: 0,
+          legacyMappedCount: 0,
+          warnings: [],
+          errors: [error.message],
+        };
+        this.$message({ type: "error", message: error.message || "JSON解析失败" });
+      }
+    },
+    submitImportJson() {
+      if (this.importLoading) {
+        return;
+      }
+      if (!this.importJsonText || !this.importJsonText.trim()) {
+        this.$message({ type: "warning", message: "请先拖拽文件或粘贴JSON内容" });
+        return;
+      }
+      let importText = this.importJsonText;
+      try {
+        const normalized = normalizeProblemImportJson(this.importJsonText);
+        this.importJsonText = normalized.jsonText;
+        this.importSummary = normalized.summary;
+        importText = normalized.jsonText;
+      } catch (error) {
+        this.$message({ type: "error", message: error.message || "JSON解析失败" });
+        return;
+      }
+      if (this.importSummary.errors.length > 0) {
+        this.$message({ type: "error", message: `存在 ${this.importSummary.errors.length} 条错误，请修正后再导入` });
+        return;
+      }
+      this.importLoading = true;
+      importProbInstsJson(importText).then((res) => {
+        const data = res && res.data ? res.data : {};
+        const total = Number(data.total || 0);
+        const success = Number(data.success || 0);
+        const skipped = Number(data.skipped || 0);
+        const failed = Number(data.failed || 0);
+        this.$message({
+          type: failed > 0 ? "warning" : "success",
+          message: `导入完成：总计 ${total}，成功 ${success}，跳过 ${skipped}，失败 ${failed}`,
+        });
+        this.dialogImportVisible = false;
+        this.refreshCurrentList();
+      }).catch((error) => {
+        const msg = error && error.response && error.response.data
+          ? (error.response.data.msg || error.response.data.message || "导入失败")
+          : "导入失败";
+        this.$message({ type: "error", message: msg });
+      }).finally(() => {
+        this.importLoading = false;
+      });
     },
     getForm(row){
       this.form = row;
@@ -535,4 +725,24 @@ export default {
 </script>
 
 <style lang="less" scoped>
+.import-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 72px;
+  margin-bottom: 10px;
+  border: 1px dashed #c0ccda;
+  border-radius: 6px;
+  color: #606266;
+  cursor: pointer;
+  background: #fafcff;
+}
+.import-dropzone:hover {
+  border-color: #409eff;
+  color: #409eff;
+}
+.import-file-input {
+  display: none;
+}
 </style>

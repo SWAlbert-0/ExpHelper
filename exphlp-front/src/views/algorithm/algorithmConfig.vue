@@ -13,9 +13,12 @@
         <el-button type="success" icon="el-icon-plus" @click="openAlgInfoAddForm()">添加</el-button>
       </el-col>
       <el-col :span="2">
+        <el-button type="primary" icon="el-icon-upload2" @click="openImportDialog()">JSON导入</el-button>
+      </el-col>
+      <el-col :span="2">
         <el-button type="danger" icon="el-icon-delete" :loading="batchDeleteLoading" @click="deleteBatch()">批量删除</el-button>
       </el-col>
-      <el-col :span="20">
+      <el-col :span="18">
         <el-form :inline="true" class="demo-form-inline" align="center">
           <el-form-item>
             <el-input v-model="algName" placeholder="请输入算法名称" clearable/>
@@ -296,6 +299,63 @@
         <el-button type="primary" @click="submitDefParasTable()">提 交</el-button>
       </div>
     </el-dialog>
+    <el-dialog
+      title="算法 JSON 导入"
+      :visible.sync="dialogImportVisible"
+      width="50%"
+      align="center"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        title="支持拖拽 .json 文件或粘贴JSON。系统会自动兼容 algorithmName/service 等旧字段。"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 10px;"
+      />
+      <div
+        class="import-dropzone"
+        @click="triggerImportFileSelect"
+        @dragover.prevent
+        @drop.prevent="handleImportFileDrop"
+      >
+        <i class="el-icon-upload2"></i>
+        <span>{{ importFileName ? `已选择: ${importFileName}` : "拖拽 JSON 文件到此处，或点击选择文件" }}</span>
+      </div>
+      <input
+        ref="importFileInput"
+        type="file"
+        accept=".json,application/json"
+        class="import-file-input"
+        @change="handleImportFileChange"
+      />
+      <el-alert
+        v-if="importSummary.total > 0"
+        :title="`解析 ${importSummary.total} 项，标准化 ${importSummary.normalized} 项，兼容映射 ${importSummary.legacyMappedCount} 项`"
+        :type="importSummary.errors.length > 0 ? 'error' : 'success'"
+        :closable="false"
+        show-icon
+        style="margin: 10px 0;"
+      />
+      <el-alert
+        v-if="importSummary.warnings.length > 0"
+        :title="`告警：${importSummary.warnings[0]}`"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 10px;"
+      />
+      <el-input
+        type="textarea"
+        :rows="14"
+        v-model="importJsonText"
+        placeholder='示例：[{"algName":"nsga2-zdt1-ls","serviceName":"nsga2-zdt1-ls","description":"demo","defParas":[{"paraName":"nVars","paraType":"int","paraValue":"100","description":"变量维度"}]}]'
+      ></el-input>
+      <div style="margin-top: 12px; text-align: right;">
+        <el-button @click="dialogImportVisible=false">取消</el-button>
+        <el-button type="primary" :loading="importLoading" @click="submitImportJson">开始导入</el-button>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -312,7 +372,9 @@ import {
   getParaByAlgId,
   countAllAlgInfos,
   countAlgInfosByAlgName,
+  importAlgsJson,
 } from "@/api/exphlp/algLibMgr";
+import { normalizeAlgorithmImportJson } from "@/utils/jsonImportNormalizer";
 
 export default {
 
@@ -325,6 +387,17 @@ export default {
       dialogDefParasTableVisible:false,
       dialogDefParasAddFormVisible: false,
       dialogDefParasUpdateFormVisible: false,
+      dialogImportVisible: false,
+      importJsonText: "",
+      importLoading: false,
+      importFileName: "",
+      importSummary: {
+        total: 0,
+        normalized: 0,
+        legacyMappedCount: 0,
+        warnings: [],
+        errors: [],
+      },
       algName: '',
       multipleSelection: [],
       batchDeleteLoading: false,
@@ -437,6 +510,120 @@ export default {
       this.algName = "";
       this.pageHelper.currentPageNum =1;
       this.pageHelper.pageSize =10;
+    },
+    openImportDialog() {
+      this.importJsonText = "";
+      this.importFileName = "";
+      this.importSummary = {
+        total: 0,
+        normalized: 0,
+        legacyMappedCount: 0,
+        warnings: [],
+        errors: [],
+      };
+      this.dialogImportVisible = true;
+    },
+    triggerImportFileSelect() {
+      if (!this.$refs.importFileInput) {
+        return;
+      }
+      this.$refs.importFileInput.click();
+    },
+    handleImportFileDrop(event) {
+      const file = event && event.dataTransfer && event.dataTransfer.files
+        ? event.dataTransfer.files[0]
+        : null;
+      this.readImportFile(file);
+    },
+    handleImportFileChange(event) {
+      const file = event && event.target && event.target.files ? event.target.files[0] : null;
+      this.readImportFile(file);
+      if (this.$refs.importFileInput) {
+        this.$refs.importFileInput.value = "";
+      }
+    },
+    readImportFile(file) {
+      if (!file) {
+        return;
+      }
+      if (!/\.json$/i.test(file.name)) {
+        this.$message({ type: "warning", message: "仅支持 .json 文件" });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.applyImportJsonText(reader.result || "", file.name);
+      };
+      reader.onerror = () => {
+        this.$message({ type: "error", message: "读取文件失败，请重试" });
+      };
+      reader.readAsText(file, "utf-8");
+    },
+    applyImportJsonText(rawText, fileName) {
+      try {
+        const normalized = normalizeAlgorithmImportJson(rawText);
+        this.importJsonText = normalized.jsonText;
+        this.importSummary = normalized.summary;
+        this.importFileName = fileName || "";
+        if (normalized.summary.errors.length > 0) {
+          this.$message({ type: "warning", message: `文件解析完成，但存在 ${normalized.summary.errors.length} 条错误` });
+          return;
+        }
+        this.$message({ type: "success", message: "JSON 已标准化，可直接导入" });
+      } catch (error) {
+        this.importSummary = {
+          total: 0,
+          normalized: 0,
+          legacyMappedCount: 0,
+          warnings: [],
+          errors: [error.message],
+        };
+        this.$message({ type: "error", message: error.message || "JSON解析失败" });
+      }
+    },
+    submitImportJson() {
+      if (this.importLoading) {
+        return;
+      }
+      if (!this.importJsonText || !this.importJsonText.trim()) {
+        this.$message({ type: "warning", message: "请先拖拽文件或粘贴JSON内容" });
+        return;
+      }
+      let importText = this.importJsonText;
+      try {
+        const normalized = normalizeAlgorithmImportJson(this.importJsonText);
+        this.importJsonText = normalized.jsonText;
+        this.importSummary = normalized.summary;
+        importText = normalized.jsonText;
+      } catch (error) {
+        this.$message({ type: "error", message: error.message || "JSON解析失败" });
+        return;
+      }
+      if (this.importSummary.errors.length > 0) {
+        this.$message({ type: "error", message: `存在 ${this.importSummary.errors.length} 条错误，请修正后再导入` });
+        return;
+      }
+      this.importLoading = true;
+      importAlgsJson(importText).then((res) => {
+        const data = res && res.data ? res.data : {};
+        const total = Number(data.total || 0);
+        const success = Number(data.success || 0);
+        const skipped = Number(data.skipped || 0);
+        const failed = Number(data.failed || 0);
+        this.$message({
+          type: failed > 0 ? "warning" : "success",
+          message: `导入完成：总计 ${total}，成功 ${success}，跳过 ${skipped}，失败 ${failed}`,
+        });
+        this.dialogImportVisible = false;
+        this.refreshCurrentList();
+      }).catch((error) => {
+        const msg = error && error.response && error.response.data
+          ? (error.response.data.msg || error.response.data.message || "导入失败")
+          : "导入失败";
+        this.$message({ type: "error", message: msg });
+      }).finally(() => {
+        this.importLoading = false;
+      });
     },
     getByAlgName(){
       getAlgsByName(this.algName,this.pageHelper.currentPageNum,this.pageHelper.pageSize).then(res => {
@@ -824,4 +1011,24 @@ export default {
 </script>
 
 <style lang="less" scoped>
+.import-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 72px;
+  margin-bottom: 10px;
+  border: 1px dashed #c0ccda;
+  border-radius: 6px;
+  color: #606266;
+  cursor: pointer;
+  background: #fafcff;
+}
+.import-dropzone:hover {
+  border-color: #409eff;
+  color: #409eff;
+}
+.import-file-input {
+  display: none;
+}
 </style>

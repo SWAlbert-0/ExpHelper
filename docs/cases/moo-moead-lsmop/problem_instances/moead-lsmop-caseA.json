@@ -1,0 +1,9 @@
+﻿{
+    "categoryName":  "moo-lsmop",
+    "instName":  "moead-lsmop-caseA-ui",
+    "machineIp":  "127.0.0.1",
+    "dirName":  "examples/lsmop/caseA",
+    "machineName":  "local",
+    "description":  "MOEA/D large-scale benchmark case A; nVars=500; nObjs=3"
+}
+

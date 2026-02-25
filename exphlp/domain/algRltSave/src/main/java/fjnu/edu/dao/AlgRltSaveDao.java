@@ -11,7 +11,10 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class AlgRltSaveDao {
@@ -51,6 +54,23 @@ public class AlgRltSaveDao {
                 .with(Sort.by(Sort.Order.desc("outputTime")))
                 .limit(1);
         return mongoTemplate.findOne(byAlgId, PlanExeResult.class, "algRltSave");
+    }
+
+    public List<PlanExeResult> listLatestByPlan(String planId) {
+        if (!StringUtils.hasText(planId)) {
+            return new ArrayList<>();
+        }
+        Query query = new Query(Criteria.where("planId").is(planId))
+                .with(Sort.by(Sort.Order.desc("outputTime")));
+        List<PlanExeResult> all = mongoTemplate.find(query, PlanExeResult.class, "algRltSave");
+        Map<String, PlanExeResult> latestByAlgId = new LinkedHashMap<>();
+        for (PlanExeResult item : all) {
+            if (item == null || !StringUtils.hasText(item.getAlgId())) {
+                continue;
+            }
+            latestByAlgId.putIfAbsent(item.getAlgId(), item);
+        }
+        return new ArrayList<>(latestByAlgId.values());
     }
 
     public PlanExeResult  getAlgSaveByAlgName(String planId, String algId, String algName) {

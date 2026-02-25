@@ -10,6 +10,8 @@ import fjnu.edu.entity.GenResult;
 import fjnu.edu.entity.MetricRunCache;
 import fjnu.edu.entity.ParetoPoint;
 import fjnu.edu.entity.PlanExeResult;
+import fjnu.edu.probInstMgr.dao.ProbInstDao;
+import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.service.AlgRltSaveService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -29,7 +31,7 @@ import java.util.regex.Pattern;
 
 @Service
 public class AlgRltSaveServiceImpl implements AlgRltSaveService {
-    private static final String METRIC_VERSION = "v1";
+    private static final String METRIC_VERSION = "v3";
     private static final String STATUS_SUCCESS = "SUCCESS";
     private static final String STATUS_EMPTY = "EMPTY";
     private static final String STATUS_PARTIAL = "PARTIAL";
@@ -49,6 +51,8 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
 
     @Autowired
     AlgRltSaveDao algRltSaveDao;
+    @Autowired
+    ProbInstDao probInstDao;
 
     @Override
     public boolean insertPlanExeResult(PlanExeResult planExeResult) {
@@ -88,13 +92,14 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
         }
 
         String problemTag = detectProblemTag(saved);
+        Map<String, String> probInstNameMap = resolveProbInstNameMap(saved.getGenResults());
         List<MetricRunCache> caches = new ArrayList<>();
         boolean cacheChanged = false;
         boolean hasPartial = false;
         List<ExeResultRunDetail> runs = new ArrayList<>();
         for (int i = 0; i < saved.getGenResults().size(); i++) {
             GenResult genResult = saved.getGenResults().get(i);
-            ExeResultRunDetail run = buildRunDetail(i + 1, genResult, saved.getStartTime(), problemTag);
+            ExeResultRunDetail run = buildRunDetail(i + 1, genResult, saved.getStartTime(), problemTag, probInstNameMap);
             runs.add(run);
             MetricRunCache nextCache = toCache(run, genResult == null ? null : genResult.getOutTime());
             caches.add(nextCache);
@@ -107,6 +112,7 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
             }
         }
         detail.setRuns(runs);
+        applyCoverageByPlan(planId, algId, runs);
         detail.setAggregate(buildAggregate(runs));
 
         if (cacheChanged || !METRIC_VERSION.equals(saved.getMetricVersion())) {
@@ -120,7 +126,8 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
         return detail;
     }
 
-    private ExeResultRunDetail buildRunDetail(int runIndex, GenResult genResult, long startTime, String problemTag) {
+    private ExeResultRunDetail buildRunDetail(int runIndex, GenResult genResult, long startTime, String problemTag,
+                                              Map<String, String> probInstNameMap) {
         ExeResultRunDetail run = new ExeResultRunDetail();
         run.setRunIndex(runIndex);
         run.setMetricStatus(METRIC_OK);
@@ -134,7 +141,7 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
             return run;
         }
         run.setProbInstId(genResult.getProbInstId());
-        run.setProbInstName(genResult.getProbInstId());
+        run.setProbInstName(resolveProbInstName(genResult.getProbInstId(), probInstNameMap));
         run.setOutputTime(formatTs(genResult.getOutTime()));
         List<EachResult> eachResults = genResult.getEachResults() == null ? new ArrayList<>() : genResult.getEachResults();
         run.setRawEachResults(eachResults);
@@ -152,6 +159,8 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
             run.setReasonCode(REASON_PARETO_PARSE_FAILED);
             return run;
         }
+        run.setSpreadDelta(round6(computeSpreadDelta(points)));
+        run.setSpacing(round6(computeSpacing(points)));
         if (!"ZDT1".equals(problemTag)) {
             run.setMetricStatus(STATUS_PARTIAL);
             run.setReasonCode(REASON_NO_REFERENCE_FRONT);
@@ -159,8 +168,42 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
         }
         run.setHv(round6(computeHv(points, REF_F1, REF_F2)));
         run.setIgdPlus(round6(computeIgdPlus(points, buildZdt1ReferenceFront(REF_FRONT_SIZE))));
-        run.setSpreadDelta(round6(computeSpreadDelta(points)));
+        run.setGd(round6(computeGd(points, buildZdt1ReferenceFront(REF_FRONT_SIZE))));
         return run;
+    }
+
+    private Map<String, String> resolveProbInstNameMap(List<GenResult> genResults) {
+        Map<String, String> map = new HashMap<>();
+        if (genResults == null || genResults.isEmpty()) {
+            return map;
+        }
+        for (GenResult genResult : genResults) {
+            if (genResult == null || !StringUtils.hasText(genResult.getProbInstId())) {
+                continue;
+            }
+            String instId = genResult.getProbInstId();
+            if (map.containsKey(instId)) {
+                continue;
+            }
+            if (probInstDao == null) {
+                map.put(instId, instId);
+                continue;
+            }
+            ProbInst probInst = probInstDao.getProbInstByID(instId);
+            map.put(instId, probInst == null ? instId : probInst.getInstName());
+        }
+        return map;
+    }
+
+    private String resolveProbInstName(String probInstId, Map<String, String> probInstNameMap) {
+        if (!StringUtils.hasText(probInstId)) {
+            return "";
+        }
+        if (probInstNameMap == null) {
+            return probInstId;
+        }
+        String name = probInstNameMap.get(probInstId);
+        return StringUtils.hasText(name) ? name : probInstId;
     }
 
     private ExeResultAggregate buildAggregate(List<ExeResultRunDetail> runs) {
@@ -172,7 +215,10 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
         agg.setRuntimeMsMean(round6(meanLong(runs, ExeResultRunDetail::getRuntimeMs)));
         agg.setHvMean(round6(meanDouble(runs, ExeResultRunDetail::getHv)));
         agg.setIgdPlusMean(round6(meanDouble(runs, ExeResultRunDetail::getIgdPlus)));
+        agg.setGdMean(round6(meanDouble(runs, ExeResultRunDetail::getGd)));
+        agg.setCoverageMean(round6(meanDouble(runs, ExeResultRunDetail::getCoverage)));
         agg.setSpreadDeltaMean(round6(meanDouble(runs, ExeResultRunDetail::getSpreadDelta)));
+        agg.setSpacingMean(round6(meanDouble(runs, ExeResultRunDetail::getSpacing)));
         return agg;
     }
 
@@ -213,7 +259,10 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
         cache.setParetoSize(run.getParetoSize());
         cache.setHv(run.getHv());
         cache.setIgdPlus(run.getIgdPlus());
+        cache.setGd(run.getGd());
+        cache.setCoverage(run.getCoverage());
         cache.setSpreadDelta(run.getSpreadDelta());
+        cache.setSpacing(run.getSpacing());
         cache.setMetricStatus(run.getMetricStatus());
         cache.setReasonCode(run.getReasonCode());
         return cache;
@@ -252,7 +301,10 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
                 && safeEq(old.getParetoSize(), next.getParetoSize())
                 && safeEq(old.getHv(), next.getHv())
                 && safeEq(old.getIgdPlus(), next.getIgdPlus())
+                && safeEq(old.getGd(), next.getGd())
+                && safeEq(old.getCoverage(), next.getCoverage())
                 && safeEq(old.getSpreadDelta(), next.getSpreadDelta())
+                && safeEq(old.getSpacing(), next.getSpacing())
                 && safeEq(old.getMetricStatus(), next.getMetricStatus())
                 && safeEq(old.getReasonCode(), next.getReasonCode());
     }
@@ -377,6 +429,24 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
         return sum / reference.size();
     }
 
+    private Double computeGd(List<ParetoPoint> approx, List<ParetoPoint> reference) {
+        if (approx == null || approx.isEmpty() || reference == null || reference.isEmpty()) {
+            return null;
+        }
+        double sum = 0d;
+        for (ParetoPoint p : approx) {
+            double min = Double.POSITIVE_INFINITY;
+            for (ParetoPoint r : reference) {
+                double d = euclidean(p, r);
+                if (d < min) {
+                    min = d;
+                }
+            }
+            sum += min;
+        }
+        return sum / approx.size();
+    }
+
     private Double computeSpreadDelta(List<ParetoPoint> points) {
         if (points == null || points.size() < 2) {
             return null;
@@ -402,6 +472,139 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
             return null;
         }
         return num / den;
+    }
+
+    private Double computeSpacing(List<ParetoPoint> points) {
+        if (points == null || points.size() < 2) {
+            return null;
+        }
+        List<ParetoPoint> nd = nonDominated(points);
+        if (nd.size() < 2) {
+            return null;
+        }
+        List<Double> nearest = new ArrayList<>();
+        for (int i = 0; i < nd.size(); i++) {
+            double min = Double.POSITIVE_INFINITY;
+            for (int j = 0; j < nd.size(); j++) {
+                if (i == j) {
+                    continue;
+                }
+                double d = euclidean(nd.get(i), nd.get(j));
+                if (d < min) {
+                    min = d;
+                }
+            }
+            if (Double.isFinite(min)) {
+                nearest.add(min);
+            }
+        }
+        if (nearest.size() < 2) {
+            return 0d;
+        }
+        double dBar = nearest.stream().mapToDouble(v -> v).average().orElse(0d);
+        double sq = 0d;
+        for (Double d : nearest) {
+            sq += (d - dBar) * (d - dBar);
+        }
+        return Math.sqrt(sq / (nearest.size() - 1));
+    }
+
+    private void applyCoverageByPlan(String planId, String currentAlgId, List<ExeResultRunDetail> runs) {
+        if (runs == null || runs.isEmpty() || !StringUtils.hasText(planId) || !StringUtils.hasText(currentAlgId)) {
+            return;
+        }
+        Map<String, List<List<ParetoPoint>>> peerByRunKey = buildPeerRunFronts(planId, currentAlgId);
+        for (ExeResultRunDetail run : runs) {
+            if (run == null) {
+                continue;
+            }
+            String runKey = buildRunKey(run.getRunIndex(), run.getProbInstId());
+            List<List<ParetoPoint>> peers = peerByRunKey.get(runKey);
+            if (peers == null || peers.isEmpty()) {
+                // Coverage is a pairwise metric; when no peer algorithm is available,
+                // keep it as N/A instead of downgrading an otherwise valid run.
+                run.setCoverage(null);
+                continue;
+            }
+            List<ParetoPoint> currentFront = nonDominated(run.getParetoPoints());
+            if (currentFront.isEmpty()) {
+                continue;
+            }
+            double sum = 0d;
+            int count = 0;
+            for (List<ParetoPoint> peerFront : peers) {
+                Double c = computeCoverage(currentFront, peerFront);
+                if (c == null) {
+                    continue;
+                }
+                sum += c;
+                count++;
+            }
+            run.setCoverage(count == 0 ? null : round6(sum / count));
+        }
+    }
+
+    private Map<String, List<List<ParetoPoint>>> buildPeerRunFronts(String planId, String currentAlgId) {
+        Map<String, List<List<ParetoPoint>>> out = new HashMap<>();
+        List<PlanExeResult> peers = algRltSaveDao.listLatestByPlan(planId);
+        for (PlanExeResult peer : peers) {
+            if (peer == null || !StringUtils.hasText(peer.getAlgId())) {
+                continue;
+            }
+            if (peer.getAlgId().equals(currentAlgId)) {
+                continue;
+            }
+            List<GenResult> genResults = peer.getGenResults();
+            if (genResults == null || genResults.isEmpty()) {
+                continue;
+            }
+            for (int i = 0; i < genResults.size(); i++) {
+                GenResult genResult = genResults.get(i);
+                if (genResult == null) {
+                    continue;
+                }
+                List<ParetoPoint> points = parseParetoPoints(genResult.getEachResults());
+                if (points.isEmpty()) {
+                    continue;
+                }
+                String key = buildRunKey(i + 1, genResult.getProbInstId());
+                out.computeIfAbsent(key, k -> new ArrayList<>()).add(nonDominated(points));
+            }
+        }
+        return out;
+    }
+
+    private String buildRunKey(Integer runIndex, String probInstId) {
+        return String.valueOf(runIndex == null ? -1 : runIndex) + "::" + (probInstId == null ? "" : probInstId);
+    }
+
+    private Double computeCoverage(List<ParetoPoint> frontA, List<ParetoPoint> frontB) {
+        if (frontA == null || frontA.isEmpty() || frontB == null || frontB.isEmpty()) {
+            return null;
+        }
+        int dominatedCount = 0;
+        for (ParetoPoint b : frontB) {
+            if (b == null) {
+                continue;
+            }
+            boolean covered = false;
+            for (ParetoPoint a : frontA) {
+                if (a == null) {
+                    continue;
+                }
+                if (dominates(a, b)) {
+                    covered = true;
+                    break;
+                }
+            }
+            if (covered) {
+                dominatedCount++;
+            }
+        }
+        if (frontB.isEmpty()) {
+            return null;
+        }
+        return ((double) dominatedCount) / ((double) frontB.size());
     }
 
     private List<ParetoPoint> nonDominated(List<ParetoPoint> points) {
@@ -512,4 +715,3 @@ public class AlgRltSaveServiceImpl implements AlgRltSaveService {
         return Double.valueOf(String.format(Locale.US, "%.6f", value));
     }
 }
-

@@ -71,3 +71,13 @@ export function countProbInstsByInstName(instName) {
     }
   });
 }
+
+export function importProbInstsJson(jsonText) {
+  return request({
+    url: "/api/ProbController/importProblemsJson",
+    method: "post",
+    data: {
+      jsonText
+    }
+  });
+}

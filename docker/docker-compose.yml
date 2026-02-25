@@ -120,9 +120,9 @@ services:
 
   nsga2_zdt1_example:
     build:
-      context: ../docs/examples/moo-nsga2-zdt1/algorithm_service
-      dockerfile: Dockerfile
-    image: nsga2-zdt1-example:local
+      context: ..
+      dockerfile: docker/alg-runner/Dockerfile
+    image: exphlp-alg-runner:local
     container_name: c_nsga2_zdt1_example
     restart: always
     depends_on:
@@ -133,6 +133,58 @@ services:
     environment:
       ALG_PORT: 18082
       ALG_SERVICE_NAME: ${NSGA2_EXAMPLE_SERVICE_NAME:-nsga2-zdt1-ls}
+      ALG_TYPE: nsga2
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_GROUP: ${NACOS_GROUP:-DEFAULT_GROUP}
+
+  moead_lsmop_example:
+    image: exphlp-alg-runner:local
+    container_name: c_moead_lsmop_example
+    restart: always
+    depends_on:
+      nacos:
+        condition: service_started
+    ports:
+      - "${MOEAD_EXAMPLE_PORT:-18083}:18083"
+    environment:
+      ALG_PORT: 18083
+      ALG_SERVICE_NAME: ${MOEAD_EXAMPLE_SERVICE_NAME:-moead-lsmop-ls}
+      ALG_TYPE: moead
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_GROUP: ${NACOS_GROUP:-DEFAULT_GROUP}
+
+  smpso_lsmop_example:
+    image: exphlp-alg-runner:local
+    container_name: c_smpso_lsmop_example
+    restart: always
+    depends_on:
+      nacos:
+        condition: service_started
+    ports:
+      - "${SMPSO_EXAMPLE_PORT:-18084}:18084"
+    environment:
+      ALG_PORT: 18084
+      ALG_SERVICE_NAME: ${SMPSO_EXAMPLE_SERVICE_NAME:-smpso-lsmop-ls}
+      ALG_TYPE: smpso
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
+      NACOS_GROUP: ${NACOS_GROUP:-DEFAULT_GROUP}
+
+  spea2_lsmop_example:
+    image: exphlp-alg-runner:local
+    container_name: c_spea2_lsmop_example
+    restart: always
+    depends_on:
+      nacos:
+        condition: service_started
+    ports:
+      - "${SPEA2_EXAMPLE_PORT:-18085}:18085"
+    environment:
+      ALG_PORT: 18085
+      ALG_SERVICE_NAME: ${SPEA2_EXAMPLE_SERVICE_NAME:-spea2-lsmop-ls}
+      ALG_TYPE: spea2
       NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:-nacos:8848}
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-public}
       NACOS_GROUP: ${NACOS_GROUP:-DEFAULT_GROUP}

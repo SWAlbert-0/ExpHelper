@@ -17,10 +17,12 @@ public class ExeResultRunDetail {
     private Integer paretoSize;
     private Double hv;
     private Double igdPlus;
+    private Double gd;
+    private Double coverage;
     private Double spreadDelta;
+    private Double spacing;
     private String metricStatus;
     private String reasonCode;
     private List<ParetoPoint> paretoPoints;
     private List<EachResult> rawEachResults;
 }
-

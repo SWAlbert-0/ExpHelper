@@ -26,9 +26,11 @@ import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.Resource;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -74,6 +76,8 @@ public class PlanExecuteImpl implements PlanExecuteService {
 
     @org.springframework.beans.factory.annotation.Value("${alg.call.retry-times:1}")
     private int retryTimes;
+    @org.springframework.beans.factory.annotation.Value("${alg.call.read-timeout-ms:10000}")
+    private int readTimeoutMs;
 
     @Override
     public boolean execute(String planId){
@@ -257,12 +261,23 @@ public class PlanExecuteImpl implements PlanExecuteService {
                 return Arrays.asList(body);
             } catch (RuntimeException ex) {
                 lastException = ex;
+                boolean timeout = isTimeoutException(ex);
                 appendPlanLog(planId, executionId, "WARN", "RETRY",
                         "算法调用失败，第" + attempt + "/" + totalAttempts + "次: " + extractErrorMessage(ex),
                         algId, runIndex, probInstId, "serviceUrl=" + serverURL);
+                String detail = "serviceUrl=" + serverURL
+                        + ";reasonCode=" + (timeout ? "ALG_CALL_TIMEOUT" : "ALG_CALL_FAILED")
+                        + ";readTimeoutMs=" + readTimeoutMs
+                        + ";runParas=" + compactRunParas(request);
+                appendPlanLog(planId, executionId, timeout ? "WARN" : "INFO", "ALG_CALL_DIAG",
+                        timeout ? "算法调用超时诊断信息" : "算法调用失败诊断信息",
+                        algId, runIndex, probInstId, detail);
             }
         }
         String detail = extractErrorMessage(lastException);
+        if (isTimeoutException(lastException)) {
+            detail = "ALG_CALL_TIMEOUT: " + detail + " (readTimeoutMs=" + readTimeoutMs + ")";
+        }
         throw new IllegalStateException("算法调用失败(已重试" + totalAttempts + "次): " + detail, lastException);
     }
 
@@ -321,6 +336,47 @@ public class PlanExecuteImpl implements PlanExecuteService {
             return root.getClass().getSimpleName();
         }
         return message.trim();
+    }
+
+    private boolean isTimeoutException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof SocketTimeoutException) {
+                return true;
+            }
+            if (current instanceof ResourceAccessException) {
+                String message = current.getMessage();
+                if (message != null && message.toLowerCase().contains("timed out")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private String compactRunParas(HttpEntity<AlgRunCtx> request) {
+        if (request == null || request.getBody() == null || request.getBody().getRunParas() == null) {
+            return "[]";
+        }
+        List<RunPara> runParas = request.getBody().getRunParas();
+        StringBuilder sb = new StringBuilder("[");
+        int max = Math.min(8, runParas.size());
+        for (int i = 0; i < max; i++) {
+            RunPara para = runParas.get(i);
+            if (para == null) {
+                continue;
+            }
+            if (sb.length() > 1) {
+                sb.append(",");
+            }
+            sb.append(para.getParaName()).append("=").append(para.getParaValue());
+        }
+        if (runParas.size() > max) {
+            sb.append(",...total=").append(runParas.size());
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     private void appendPlanLog(String planId, String executionId, String level, String stage, String message,
