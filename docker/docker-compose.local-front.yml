@@ -83,6 +83,8 @@ services:
       ALG_CALL_CONNECT_TIMEOUT_MS: ${ALG_CALL_CONNECT_TIMEOUT_MS:-3000}
       ALG_CALL_READ_TIMEOUT_MS: ${ALG_CALL_READ_TIMEOUT_MS:-10000}
       ALG_CALL_RETRY_TIMES: ${ALG_CALL_RETRY_TIMES:-1}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   exphlp_front:
     image: ${FRONT_NGINX_IMAGE:-nginx:1.27-alpine}

@@ -138,3 +138,18 @@ Use separate terminals for backend and frontend.
 - Any change that adds/modifies runtime or deployment config must update `docs/dev/配置清单.md` in the same delivery.
 - Before completion, run:
   - `powershell -ExecutionPolicy Bypass -File scripts/check-config-doc.ps1`
+
+### 10) Long-Term Dev Log Rule (Mandatory)
+- `docs/dev/开发日志.md` is the single long-term engineering log.
+- Do not create parallel stage logs like `阶段任务-*.md`; append the phase summary into `开发日志.md`.
+- For version4 Python work, each completed task must append:
+  - changed modules/files,
+  - verification commands/results,
+  - impact on execution chain and user operation.
+
+### 11) Python Phase Documentation Sync Rule (Mandatory)
+- Any Python-side feature delivery must sync at least:
+  - `docs/dev/开发日志.md`,
+  - `docs/dev/维护手册.md`,
+  - `docs/user/算法服务接入与容器化指南.md`.
+- If runtime/deploy configuration is changed, update `docs/dev/配置清单.md` in the same commit.

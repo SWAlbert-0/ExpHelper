@@ -105,3 +105,41 @@ export function importAlgsJson(jsonText) {
     }
   });
 }
+
+export function uploadAlgSource(algId, file) {
+  const formData = new FormData();
+  formData.append("algId", algId);
+  formData.append("file", file);
+  return request({
+    url: "/api/AlgController/uploadSource",
+    method: "post",
+    data: formData,
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}
+
+export function triggerAlgBuild(taskId) {
+  return request({
+    url: "/api/AlgController/buildAndStart",
+    method: "post",
+    params: { taskId },
+  });
+}
+
+export function getAlgBuildStatus(taskId) {
+  return request({
+    url: "/api/AlgController/buildStatus",
+    method: "get",
+    params: { taskId },
+  });
+}
+
+export function getAlgBuildLogs(taskId, tail = 200) {
+  return request({
+    url: "/api/AlgController/buildLogs",
+    method: "get",
+    params: { taskId, tail },
+  });
+}

@@ -30,6 +30,14 @@
   `powershell -ExecutionPolicy Bypass -File scripts/ops.ps1 -Action alg-check`  
   `powershell -ExecutionPolicy Bypass -File scripts/ops.ps1 -Action alg-down`
 
+- 算法源码上传构建（由后端接口触发任务脚本）
+  - 实际任务脚本：`scripts/tasks/build-uploaded-alg.ps1`
+  - Linux 容器内任务脚本：`scripts/tasks/build-uploaded-alg.sh`
+  - 查询入口：算法库管理“源码”弹窗中的任务状态与日志
+
+说明：
+- Linux 任务脚本在检查 Nacos 注册时会强制 `curl --noproxy '*'`，避免容器代理变量导致“已注册但检测超时”。
+
 - 一键打开前端/Nacos/快速上手文档  
   `powershell -ExecutionPolicy Bypass -File scripts/ops.ps1 -Action onboarding`
 

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("bootstrap", "deploy", "check", "alg-up", "alg-down", "alg-check", "gate", "onboarding")]
+    [ValidateSet("bootstrap", "deploy", "check", "alg-up", "alg-down", "alg-check", "alg-build", "alg-start", "alg-restart", "alg-status", "gate", "onboarding")]
     [string]$Action = "bootstrap",
     [string]$EnvFile = "docker/.env",
     [string]$ComposeFile = "docker/docker-compose.yml",
@@ -53,6 +53,21 @@ switch ($Action) {
         Invoke-Script -name "down-alg-services.ps1" -extraArgs $args
     }
     "alg-check" {
+        Invoke-Script -name "check-alg-services.ps1" -extraArgs @()
+    }
+    "alg-build" {
+        Write-Host "[INFO] alg-build 当前由后端接口触发 scripts/tasks/build-uploaded-alg.ps1 执行。" -ForegroundColor Cyan
+        exit 0
+    }
+    "alg-start" {
+        Write-Host "[INFO] alg-start 当前由后端接口触发 scripts/tasks/build-uploaded-alg.ps1 执行。" -ForegroundColor Cyan
+        exit 0
+    }
+    "alg-restart" {
+        Write-Host "[INFO] alg-restart 当前由后端接口触发 scripts/tasks/build-uploaded-alg.ps1 执行。" -ForegroundColor Cyan
+        exit 0
+    }
+    "alg-status" {
         Invoke-Script -name "check-alg-services.ps1" -extraArgs @()
     }
     "gate" {

@@ -19,6 +19,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class AlgLibMgrDao {
@@ -42,6 +43,7 @@ public class AlgLibMgrDao {
         Pageable pageable = PageRequest.of(pageNum,pageSize);
         Query query = new Query().with(pageable).with(sort);
         List<AlgInfo> algInfos = mongoTemplate.find(query, AlgInfo.class,"algLibMgr");
+        normalizeRuntimeTypes(algInfos);
 
         return algInfos;
     }
@@ -53,6 +55,7 @@ public class AlgLibMgrDao {
         }
         Query query = new Query(buildIdCriteria(algId));
         AlgInfo algInfo = mongoTemplate.findOne(query, AlgInfo.class,"algLibMgr");
+        normalizeRuntimeType(algInfo);
 
         return algInfo;
     }
@@ -87,6 +90,7 @@ public class AlgLibMgrDao {
         Criteria criteria = Criteria.where("algName").is(algName);
         Query query = new Query(criteria).with(pageable);
         List<AlgInfo> algInfos = mongoTemplate.find(query, AlgInfo.class, "algLibMgr");
+        normalizeRuntimeTypes(algInfos);
 
         return algInfos;
     }
@@ -96,13 +100,14 @@ public class AlgLibMgrDao {
         Criteria criteria = Criteria.where("algName").is(algName);
         Query query = new Query(criteria);
         AlgInfo algInfo = mongoTemplate.findOne(query, AlgInfo.class, "algLibMgr");
+        normalizeRuntimeType(algInfo);
 
         return algInfo;
     }
 
     //增加一个算法
     public boolean addAlgInfo(AlgInfo algInfo){
-
+        normalizeRuntimeType(algInfo);
         mongoTemplate.insert(algInfo,"algLibMgr");
 
         return true;
@@ -161,6 +166,7 @@ public class AlgLibMgrDao {
 
         Update update = new Update().set("algName", algInfo.getAlgName())
                 .set("serviceName", algInfo.getServiceName())
+                .set("runtimeType", normalizeRuntimeTypeValue(algInfo.getRuntimeType()))
                 .set("defParas", algInfo.getDefParas()).set("description", algInfo.getDescription());
         mongoTemplate.updateFirst(query,update, AlgInfo.class,"algLibMgr");
 
@@ -188,6 +194,33 @@ public class AlgLibMgrDao {
         Query query = new Query(buildIdCriteria(algId));
         AlgInfo algInfo = mongoTemplate.findOne(query, AlgInfo.class,"algLibMgr");
         return algInfo == null ? null : algInfo.getServiceName();
+    }
+
+    private void normalizeRuntimeTypes(List<AlgInfo> algInfos) {
+        if (algInfos == null || algInfos.isEmpty()) {
+            return;
+        }
+        for (AlgInfo algInfo : algInfos) {
+            normalizeRuntimeType(algInfo);
+        }
+    }
+
+    private void normalizeRuntimeType(AlgInfo algInfo) {
+        if (algInfo == null) {
+            return;
+        }
+        algInfo.setRuntimeType(normalizeRuntimeTypeValue(algInfo.getRuntimeType()));
+    }
+
+    private String normalizeRuntimeTypeValue(String runtimeType) {
+        if (!StringUtils.hasText(runtimeType)) {
+            return "java";
+        }
+        String normalized = runtimeType.trim().toLowerCase(Locale.ROOT);
+        if ("python".equals(normalized)) {
+            return "python";
+        }
+        return "java";
     }
 
     private Criteria buildIdCriteria(String id) {

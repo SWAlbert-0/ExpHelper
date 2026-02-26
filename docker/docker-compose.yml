@@ -103,6 +103,7 @@ services:
       ALG_CALL_RETRY_TIMES: ${ALG_CALL_RETRY_TIMES:-1}
     volumes:
       - avatar-data:/app/data/uploads/avatar
+      - /var/run/docker.sock:/var/run/docker.sock
 
   exphlp_front:
     build:

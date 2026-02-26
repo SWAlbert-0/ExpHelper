@@ -135,6 +135,20 @@ function parseDefParas(item) {
     .map((row, index) => normalizeDefPara(row, index));
 }
 
+function normalizeRuntimeTypeValue(rawValue) {
+  const text = trimValue(rawValue).toLowerCase();
+  if (!text) {
+    return { value: "java", normalizedFrom: "" };
+  }
+  if (text === "python" || text === "py") {
+    return { value: "python", normalizedFrom: text };
+  }
+  if (text === "java" || text === "jvm") {
+    return { value: "java", normalizedFrom: text };
+  }
+  return { value: "java", normalizedFrom: text };
+}
+
 export function normalizeAlgorithmImportJson(rawText) {
   const items = parseRoot(rawText);
   const normalizedItems = [];
@@ -150,6 +164,8 @@ export function normalizeAlgorithmImportJson(rawText) {
     const algName = firstNonEmpty(rawItem, ["algName", "algorithmName", "name"]);
     const serviceName = firstNonEmpty(rawItem, ["serviceName", "service", "service_name", "appName"]);
     const description = firstNonEmpty(rawItem, ["description", "algDesc", "desc"]);
+    const runtimeTypeRaw = firstNonEmpty(rawItem, ["runtimeType", "runtime", "runtime_type", "language", "lang"]);
+    const runtimeType = normalizeRuntimeTypeValue(runtimeTypeRaw.value);
 
     if (!algName.value) {
       errors.push(`第 ${index + 1} 项缺少 algName`);
@@ -161,15 +177,19 @@ export function normalizeAlgorithmImportJson(rawText) {
     }
 
     const usedLegacy = [algName.key, serviceName.key, description.key]
-      .filter((key) => ["algorithmName", "name", "service", "service_name", "appName", "algDesc", "desc"].includes(key));
+      .filter((key) => ["algorithmName", "name", "service", "service_name", "appName", "algDesc", "desc", "runtime", "runtime_type", "language", "lang"].includes(key));
     if (usedLegacy.length > 0 || rawItem.params || rawItem.parameters || rawItem.paraList) {
       legacyMappedCount += 1;
       warnings.push(`第 ${index + 1} 项使用兼容字段映射`);
+    }
+    if (runtimeTypeRaw.value && runtimeType.value === "java" && runtimeType.normalizedFrom && runtimeType.normalizedFrom !== "java" && runtimeType.normalizedFrom !== "jvm") {
+      warnings.push(`第 ${index + 1} 项 runtimeType=${runtimeTypeRaw.value} 不受支持，已回退为 java`);
     }
 
     normalizedItems.push({
       algName: algName.value,
       serviceName: serviceName.value,
+      runtimeType: runtimeType.value,
       description: description.value,
       defParas: parseDefParas(rawItem),
     });

@@ -2,6 +2,8 @@ package fjnu.edu.controller;
 
 import fjnu.edu.auth.ApiResponse;
 import fjnu.edu.auth.ErrorCode;
+import fjnu.edu.algruntime.entity.AlgBuildTask;
+import fjnu.edu.algruntime.service.AlgBuildTaskService;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
 import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
 import fjnu.edu.alglibmgr.entity.DefPara;
@@ -12,6 +14,7 @@ import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.Collections;
@@ -19,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
+import java.util.Locale;
 
 @RestController
 @CrossOrigin
@@ -33,8 +37,12 @@ public class AlgLibMgrCtrl {
     @Autowired
     ObjectMapper objectMapper;
 
+    @Autowired
+    AlgBuildTaskService algBuildTaskService;
+
     @PostMapping("/addAlg")
     public String addAlgInfo (@RequestBody AlgInfo algInfo) {
+        normalizeAlgInfo(algInfo);
         if (algInfo == null || !StringUtils.hasText(algInfo.getAlgName())) {
             throw new IllegalArgumentException("算法名称不能为空");
         }
@@ -110,6 +118,69 @@ public class AlgLibMgrCtrl {
         }
     }
 
+    @PostMapping("/uploadSource")
+    public Map<String, Object> uploadSource(@RequestParam("algId") String algId,
+                                            @RequestParam("file") MultipartFile file,
+                                            HttpServletRequest request) {
+        if (!StringUtils.hasText(algId)) {
+            return ApiResponse.failed(request, 400, "algId不能为空", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        AlgInfo algInfo = algLibMgrService.getAlgInfoById(algId);
+        if (algInfo == null) {
+            return ApiResponse.failed(request, 404, "算法不存在", ErrorCode.ALG_NOT_FOUND.code());
+        }
+        try {
+            AlgBuildTask task = algBuildTaskService.createUploadTask(algInfo, file, request.getHeader("X-Trace-Id"));
+            return ApiResponse.ok(request, task, "源码上传成功");
+        } catch (Exception ex) {
+            return ApiResponse.failed(request, 400, "源码上传失败: " + ex.getMessage(), ErrorCode.INVALID_ARGUMENT.code());
+        }
+    }
+
+    @PostMapping("/buildAndStart")
+    public Map<String, Object> buildAndStart(@RequestParam("taskId") String taskId, HttpServletRequest request) {
+        if (!StringUtils.hasText(taskId)) {
+            return ApiResponse.failed(request, 400, "taskId不能为空", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        try {
+            AlgBuildTask task = algBuildTaskService.triggerBuild(taskId, request.getHeader("X-Trace-Id"));
+            return ApiResponse.ok(request, task, "构建任务已启动");
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.failed(request, 404, ex.getMessage(), ErrorCode.INVALID_ARGUMENT.code());
+        } catch (Exception ex) {
+            return ApiResponse.failed(request, 500, "构建任务启动失败: " + ex.getMessage(), ErrorCode.INTERNAL_ERROR.code());
+        }
+    }
+
+    @GetMapping("/buildStatus")
+    public Map<String, Object> getBuildStatus(@RequestParam("taskId") String taskId, HttpServletRequest request) {
+        if (!StringUtils.hasText(taskId)) {
+            return ApiResponse.failed(request, 400, "taskId不能为空", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        AlgBuildTask task = algBuildTaskService.getTask(taskId);
+        if (task == null) {
+            return ApiResponse.failed(request, 404, "构建任务不存在", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        return ApiResponse.ok(request, task, "获取构建状态成功");
+    }
+
+    @GetMapping("/buildLogs")
+    public Map<String, Object> getBuildLogs(@RequestParam("taskId") String taskId,
+                                            @RequestParam(value = "tail", required = false, defaultValue = "200") int tail,
+                                            HttpServletRequest request) {
+        if (!StringUtils.hasText(taskId)) {
+            return ApiResponse.failed(request, 400, "taskId不能为空", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        AlgBuildTask task = algBuildTaskService.getTask(taskId);
+        if (task == null) {
+            return ApiResponse.failed(request, 404, "构建任务不存在", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("task", task);
+        data.put("logs", algBuildTaskService.tailLog(taskId, tail));
+        return ApiResponse.ok(request, data, "获取构建日志成功");
+    }
+
     @PostMapping("/deleteAlgById")
     public Map<String, Object> deleteAlgInfoById(@RequestParam(value = "algId") String algId, HttpServletRequest request) {
         if (!StringUtils.hasText(algId)) {
@@ -165,6 +236,10 @@ public class AlgLibMgrCtrl {
         if (algInfo == null || !StringUtils.hasText(algInfo.getAlgId())) {
             throw new IllegalArgumentException("算法ID不能为空");
         }
+        algInfo.setAlgName(trimOrEmpty(algInfo.getAlgName()));
+        algInfo.setServiceName(trimOrEmpty(algInfo.getServiceName()));
+        algInfo.setRuntimeType(normalizeRuntimeType(algInfo.getRuntimeType()));
+        algInfo.setDescription(trimOrEmpty(algInfo.getDescription()));
         algLibMgrService.updateAlgInfoById(algInfo);
     }
 
@@ -209,6 +284,7 @@ public class AlgLibMgrCtrl {
         data.put("algId", algInfo.getAlgId());
         data.put("algName", algInfo.getAlgName());
         data.put("serviceName", serviceName);
+        data.put("runtimeType", normalizeRuntimeType(algInfo.getRuntimeType()));
         data.put("composeYaml", buildComposeYaml(imageName, serviceName));
         data.put("envTemplate", "NACOS_SERVER_ADDR=host.docker.internal:8848\nNACOS_NAMESPACE=public\nNACOS_GROUP=DEFAULT_GROUP");
         data.put("runCommand", "docker compose -f docker-compose.algorithm.yml --env-file .env.algorithm up -d");
@@ -262,6 +338,7 @@ public class AlgLibMgrCtrl {
         algInfo.setAlgId(null);
         algInfo.setAlgName(trimOrEmpty(algInfo.getAlgName()));
         algInfo.setServiceName(trimOrEmpty(algInfo.getServiceName()));
+        algInfo.setRuntimeType(normalizeRuntimeType(algInfo.getRuntimeType()));
         algInfo.setDescription(trimOrEmpty(algInfo.getDescription()));
         if (algInfo.getDefParas() != null) {
             for (int i = 0; i < algInfo.getDefParas().size(); i++) {
@@ -280,6 +357,17 @@ public class AlgLibMgrCtrl {
 
     private String trimOrEmpty(String text) {
         return text == null ? "" : text.trim();
+    }
+
+    private String normalizeRuntimeType(String runtimeType) {
+        if (!StringUtils.hasText(runtimeType)) {
+            return "java";
+        }
+        String normalized = runtimeType.trim().toLowerCase(Locale.ROOT);
+        if ("python".equals(normalized)) {
+            return "python";
+        }
+        return "java";
     }
 
 }

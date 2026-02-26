@@ -17,6 +17,7 @@ public class AlgInfo {
 	private String algId;            // MongoDB自动生成的Id
 	private String algName;          // 算法名
 	private String serviceName;     // 算法注册的服务名
+	private String runtimeType;     // 运行时类型: java/python
 	private String description;      // 算法描述
 	private List<DefPara> defParas;  // 算法参数
 

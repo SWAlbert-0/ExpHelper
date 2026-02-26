@@ -1,5 +1,7 @@
 package fjnu.edu.controller;
 
+import fjnu.edu.algruntime.entity.AlgBuildTask;
+import fjnu.edu.algruntime.service.AlgBuildTaskService;
 import fjnu.edu.alglibmgr.service.AlgLibMgrService;
 import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
@@ -7,6 +9,7 @@ import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -16,6 +19,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AlgLibMgrCtrlTest {
@@ -23,14 +27,17 @@ class AlgLibMgrCtrlTest {
     private AlgLibMgrCtrl controller;
     private AlgLibMgrService algLibMgrService;
     private ExePlanMgrService exePlanMgrService;
+    private AlgBuildTaskService algBuildTaskService;
 
     @BeforeEach
     void setUp() {
         controller = new AlgLibMgrCtrl();
         algLibMgrService = mock(AlgLibMgrService.class);
         exePlanMgrService = mock(ExePlanMgrService.class);
+        algBuildTaskService = mock(AlgBuildTaskService.class);
         ReflectionTestUtils.setField(controller, "algLibMgrService", algLibMgrService);
         ReflectionTestUtils.setField(controller, "exePlanMgrService", exePlanMgrService);
+        ReflectionTestUtils.setField(controller, "algBuildTaskService", algBuildTaskService);
         ReflectionTestUtils.setField(controller, "objectMapper", new ObjectMapper());
     }
 
@@ -161,6 +168,25 @@ class AlgLibMgrCtrlTest {
         Map<String, Object> data = (Map<String, Object>) response.get("data");
         assertEquals(1, data.get("success"));
         assertEquals(0, data.get("failed"));
+        org.mockito.ArgumentCaptor<AlgInfo> captor = org.mockito.ArgumentCaptor.forClass(AlgInfo.class);
+        verify(algLibMgrService).addAlgInfo(captor.capture());
+        assertEquals("java", captor.getValue().getRuntimeType());
+    }
+
+    @Test
+    void addAlgDefaultsRuntimeTypeToJava() {
+        AlgInfo info = new AlgInfo();
+        info.setAlgName("demo-add");
+        info.setServiceName("demo-service");
+        info.setDescription("demo");
+        when(algLibMgrService.getAlgInfoByName("demo-add")).thenReturn(null);
+
+        String result = controller.addAlgInfo(info);
+
+        assertEquals("demo-add", result);
+        org.mockito.ArgumentCaptor<AlgInfo> captor = org.mockito.ArgumentCaptor.forClass(AlgInfo.class);
+        verify(algLibMgrService).addAlgInfo(captor.capture());
+        assertEquals("java", captor.getValue().getRuntimeType());
     }
 
     @Test
@@ -172,5 +198,32 @@ class AlgLibMgrCtrlTest {
 
         assertEquals(400, response.get("code"));
         assertEquals("INVALID_ARGUMENT", response.get("errorCode"));
+    }
+
+    @Test
+    void uploadSourceReturns200WhenUploadAccepted() {
+        AlgInfo info = new AlgInfo();
+        info.setAlgId("alg-1");
+        info.setAlgName("demo");
+        info.setServiceName("demo-service");
+        when(algLibMgrService.getAlgInfoById("alg-1")).thenReturn(info);
+        AlgBuildTask task = new AlgBuildTask();
+        task.setTaskId("t-1");
+        task.setStatus("PENDING");
+        when(algBuildTaskService.createUploadTask(org.mockito.ArgumentMatchers.eq(info),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(task);
+
+        MockMultipartFile file = new MockMultipartFile("file", "demo.zip", "application/zip", "zip".getBytes());
+        Map<String, Object> response = controller.uploadSource("alg-1", file, new MockHttpServletRequest());
+
+        assertEquals(200, response.get("code"));
+    }
+
+    @Test
+    void buildStatusReturns404WhenTaskMissing() {
+        when(algBuildTaskService.getTask("missing")).thenReturn(null);
+        Map<String, Object> response = controller.getBuildStatus("missing", new MockHttpServletRequest());
+        assertEquals(404, response.get("code"));
     }
 }

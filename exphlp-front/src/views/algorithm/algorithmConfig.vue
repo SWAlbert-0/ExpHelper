@@ -40,14 +40,22 @@
       <el-table-column type="selection" width="60" align="center"></el-table-column>
       <el-table-column prop="algName" label="算法名称" width="250" align="center"></el-table-column>
       <el-table-column prop="serviceName" label="服务名" width="250" align="center"></el-table-column>
+      <el-table-column prop="runtimeType" label="运行时" width="120" align="center">
+        <template slot-scope="scope">
+          <el-tag size="mini" :type="scope.row.runtimeType === 'python' ? 'success' : 'info'">
+            {{ scope.row.runtimeType === "python" ? "Python" : "Java" }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="description" label="算法描述" width="300" align="center"></el-table-column>
       <el-table-column label="参数" align="center">
         <template slot-scope="scope">
           <el-button  type="text" size="mini" @click="openDefParasTable(scope.row)">参数列表</el-button>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="250">
+      <el-table-column label="操作" align="center" width="340">
         <template slot-scope="scope">
+          <el-button type="warning" size="mini" icon="el-icon-upload2" @click="openSourceUploadDialog(scope.row)">源码</el-button>
           <el-button type="primary" size="mini" icon="el-icon-edit" @click="openAlgInfoUpdateForm(scope.row)">编辑</el-button>
           <el-button
             type="danger"
@@ -88,6 +96,11 @@
         </el-form-item>
         <el-form-item label="服务名" prop="serviceName">
           <el-input v-model="algInfoAddForm.serviceName" placeholder="服务名"></el-input>
+        </el-form-item>
+        <el-form-item label="运行时" prop="runtimeType">
+          <el-select v-model="algInfoAddForm.runtimeType" style="width: 100%;">
+            <el-option v-for="item in runtimeTypeOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="算法描述" prop="description">
           <el-input type="textarea" v-model="algInfoAddForm.description" placeholder="请输入算法描述" ></el-input>
@@ -192,6 +205,11 @@
         </el-form-item>
         <el-form-item label="服务名" prop="serviceName">
           <el-input v-model="algInfoUpdateForm.serviceName"></el-input>
+        </el-form-item>
+        <el-form-item label="运行时" prop="runtimeType">
+          <el-select v-model="algInfoUpdateForm.runtimeType" style="width: 100%;">
+            <el-option v-for="item in runtimeTypeOptions" :key="item.value" :label="item.label" :value="item.value"></el-option>
+          </el-select>
         </el-form-item>
         <el-form-item label="算法描述" prop="description">
           <el-input type="textarea" v-model="algInfoUpdateForm.description" placeholder="请输入算法描述"></el-input>
@@ -349,12 +367,60 @@
         type="textarea"
         :rows="14"
         v-model="importJsonText"
-        placeholder='示例：[{"algName":"nsga2-zdt1-ls","serviceName":"nsga2-zdt1-ls","description":"demo","defParas":[{"paraName":"nVars","paraType":"int","paraValue":"100","description":"变量维度"}]}]'
+        placeholder='示例：[{"algName":"nsga2-zdt1-ls","serviceName":"nsga2-zdt1-ls","runtimeType":"java","description":"demo","defParas":[{"paraName":"nVars","paraType":"int","paraValue":"100","description":"变量维度"}]}]'
       ></el-input>
       <div style="margin-top: 12px; text-align: right;">
         <el-button @click="dialogImportVisible=false">取消</el-button>
         <el-button type="primary" :loading="importLoading" @click="submitImportJson">开始导入</el-button>
       </div>
+    </el-dialog>
+
+    <el-dialog
+      title="源码上传与构建"
+      :visible.sync="dialogSourceUploadVisible"
+      width="55%"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        :title="`当前算法：${sourceUploadForm.algName || '--'}（${sourceUploadForm.runtimeType || 'java'}）`"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px;"
+      />
+      <el-upload
+        class="upload-demo"
+        drag
+        action=""
+        :auto-upload="false"
+        :show-file-list="true"
+        :file-list="sourceUploadForm.fileList"
+        :on-change="onSourceFileChange"
+        :on-remove="onSourceFileRemove"
+      >
+        <i class="el-icon-upload"></i>
+        <div class="el-upload__text">将 zip 源码包拖到此处，或<em>点击上传</em></div>
+        <div slot="tip" class="el-upload__tip">必须包含 exphlp-alg.json</div>
+      </el-upload>
+      <div style="margin-top: 12px;">
+        <el-button type="primary" :loading="sourceUploadLoading" @click="submitSourceUpload">上传源码</el-button>
+        <el-button type="success" :loading="buildStartLoading" :disabled="!sourceUploadForm.taskId" @click="startBuildTask">构建并启动</el-button>
+        <el-button type="default" :disabled="!sourceUploadForm.taskId" @click="refreshBuildStatus">刷新状态</el-button>
+      </div>
+      <el-descriptions v-if="sourceUploadForm.taskId" :column="2" border style="margin-top: 14px;">
+        <el-descriptions-item label="任务ID">{{ sourceUploadForm.taskId }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ sourceUploadForm.status || "--" }}</el-descriptions-item>
+        <el-descriptions-item label="错误码">{{ sourceUploadForm.errorCode || "--" }}</el-descriptions-item>
+        <el-descriptions-item label="错误信息">{{ sourceUploadForm.errorMessage || "--" }}</el-descriptions-item>
+      </el-descriptions>
+      <el-input
+        v-if="sourceUploadForm.taskId"
+        type="textarea"
+        :rows="12"
+        v-model="sourceUploadForm.logs"
+        readonly
+        style="margin-top: 12px;"
+      />
     </el-dialog>
   </div>
 </template>
@@ -373,6 +439,10 @@ import {
   countAllAlgInfos,
   countAlgInfosByAlgName,
   importAlgsJson,
+  uploadAlgSource,
+  triggerAlgBuild,
+  getAlgBuildStatus,
+  getAlgBuildLogs,
 } from "@/api/exphlp/algLibMgr";
 import { normalizeAlgorithmImportJson } from "@/utils/jsonImportNormalizer";
 
@@ -388,6 +458,7 @@ export default {
       dialogDefParasAddFormVisible: false,
       dialogDefParasUpdateFormVisible: false,
       dialogImportVisible: false,
+      dialogSourceUploadVisible: false,
       importJsonText: "",
       importLoading: false,
       importFileName: "",
@@ -398,6 +469,20 @@ export default {
         warnings: [],
         errors: [],
       },
+      sourceUploadLoading: false,
+      buildStartLoading: false,
+      sourceUploadForm: {
+        algId: "",
+        algName: "",
+        runtimeType: "java",
+        file: null,
+        fileList: [],
+        taskId: "",
+        status: "",
+        errorCode: "",
+        errorMessage: "",
+        logs: "",
+      },
       algName: '',
       multipleSelection: [],
       batchDeleteLoading: false,
@@ -407,12 +492,14 @@ export default {
       algInfoAddForm:{
         algName:"",
         serviceName:'',
+        runtimeType: "java",
         defParas:[],
         description:"",
       },
       algInfoUpdateForm:{
         algName:"",
         serviceName:'',
+        runtimeType: "java",
         description:"",
       },
       defParasForm:{
@@ -453,12 +540,19 @@ export default {
           label: "Object",
         },
       ],
+      runtimeTypeOptions: [
+        { value: "java", label: "Java" },
+        { value: "python", label: "Python" },
+      ],
       algInfoFormRules: {
         algName: [
           { required: true, message: '请输入算法名称', trigger: 'blur' },
         ],
         serviceName:[
           { required: true, message: '请输入服务名', trigger: 'blur' },
+        ],
+        runtimeType:[
+          { required: true, message: '请选择运行时', trigger: 'change' },
         ],
         description: [
           { required: true, message: '请输入算法描述', trigger: 'blur' }
@@ -491,7 +585,7 @@ export default {
   methods: {
     getAlgInfos(){
       getAlgs(this.pageHelper.currentPageNum,this.pageHelper.pageSize).then(res => {
-        this.algInfo = res;
+        this.algInfo = this.normalizeAlgRows(res);
         this.countAllAlgInfos();
       });
     },
@@ -504,7 +598,7 @@ export default {
     },
     back(){
       getAlgs(1,10).then(res => {
-        this.algInfo = res;
+        this.algInfo = this.normalizeAlgRows(res);
         this.countAllAlgInfos();
       });
       this.algName = "";
@@ -522,6 +616,85 @@ export default {
         errors: [],
       };
       this.dialogImportVisible = true;
+    },
+    openSourceUploadDialog(row) {
+      this.sourceUploadForm = {
+        algId: row.algId,
+        algName: row.algName,
+        runtimeType: this.normalizeRuntimeType(row.runtimeType),
+        file: null,
+        fileList: [],
+        taskId: "",
+        status: "",
+        errorCode: "",
+        errorMessage: "",
+        logs: "",
+      };
+      this.dialogSourceUploadVisible = true;
+    },
+    onSourceFileChange(file, fileList) {
+      this.sourceUploadForm.file = file && file.raw ? file.raw : null;
+      this.sourceUploadForm.fileList = fileList.slice(-1);
+    },
+    onSourceFileRemove() {
+      this.sourceUploadForm.file = null;
+      this.sourceUploadForm.fileList = [];
+    },
+    submitSourceUpload() {
+      if (!this.sourceUploadForm.algId) {
+        this.$message({ type: "warning", message: "算法ID为空，无法上传" });
+        return;
+      }
+      if (!this.sourceUploadForm.file) {
+        this.$message({ type: "warning", message: "请先选择 zip 源码包" });
+        return;
+      }
+      this.sourceUploadLoading = true;
+      uploadAlgSource(this.sourceUploadForm.algId, this.sourceUploadForm.file).then((res) => {
+        const task = res && res.data ? res.data : {};
+        this.sourceUploadForm.taskId = task.taskId || "";
+        this.sourceUploadForm.status = task.status || "";
+        this.sourceUploadForm.errorCode = task.errorCode || "";
+        this.sourceUploadForm.errorMessage = task.errorMessage || "";
+        this.$message({ type: "success", message: "源码上传成功，可开始构建" });
+      }).catch((error) => {
+        const message = this.extractErrorMessage(error, "源码上传失败");
+        this.$message({ type: "error", message });
+      }).finally(() => {
+        this.sourceUploadLoading = false;
+      });
+    },
+    startBuildTask() {
+      if (!this.sourceUploadForm.taskId) {
+        this.$message({ type: "warning", message: "请先上传源码" });
+        return;
+      }
+      this.buildStartLoading = true;
+      triggerAlgBuild(this.sourceUploadForm.taskId).then((res) => {
+        const task = res && res.data ? res.data : {};
+        this.sourceUploadForm.status = task.status || "RUNNING";
+        this.$message({ type: "success", message: "构建任务已启动" });
+        this.refreshBuildStatus();
+      }).catch((error) => {
+        const message = this.extractErrorMessage(error, "构建启动失败");
+        this.$message({ type: "error", message });
+      }).finally(() => {
+        this.buildStartLoading = false;
+      });
+    },
+    refreshBuildStatus() {
+      if (!this.sourceUploadForm.taskId) {
+        return;
+      }
+      getAlgBuildStatus(this.sourceUploadForm.taskId).then((res) => {
+        const task = res && res.data ? res.data : {};
+        this.sourceUploadForm.status = task.status || "";
+        this.sourceUploadForm.errorCode = task.errorCode || "";
+        this.sourceUploadForm.errorMessage = task.errorMessage || "";
+      });
+      getAlgBuildLogs(this.sourceUploadForm.taskId, 300).then((res) => {
+        this.sourceUploadForm.logs = res && res.data ? (res.data.logs || "") : "";
+      });
     },
     triggerImportFileSelect() {
       if (!this.$refs.importFileInput) {
@@ -627,7 +800,7 @@ export default {
     },
     getByAlgName(){
       getAlgsByName(this.algName,this.pageHelper.currentPageNum,this.pageHelper.pageSize).then(res => {
-        this.algInfo = res;
+        this.algInfo = this.normalizeAlgRows(res);
         this.countAlgInfosByAlgName(this.algName);
       });
     },
@@ -636,6 +809,7 @@ export default {
       this.algInfoAddForm = {
         algName:"",
         serviceName: '',
+        runtimeType: "java",
         defParas:[],
         description:"",
       };
@@ -712,7 +886,9 @@ export default {
     },
     //
     openAlgInfoUpdateForm(row){
-      this.algInfoUpdateForm = row;
+      this.algInfoUpdateForm = Object.assign({}, row, {
+        runtimeType: this.normalizeRuntimeType(row && row.runtimeType),
+      });
       this.dialogAlgInfoUpdateFormVisible = true;
     },
     closeAlgInfoUpdateForm(formName){
@@ -1004,6 +1180,18 @@ export default {
         return `algId=${validIds.join("、")}`;
       }
       return `algId=${validIds.slice(0, 3).join("、")} 等 ${validIds.length} 条`;
+    },
+    normalizeRuntimeType(runtimeType) {
+      const text = (runtimeType || "").toString().trim().toLowerCase();
+      return text === "python" ? "python" : "java";
+    },
+    normalizeAlgRows(rows) {
+      if (!Array.isArray(rows)) {
+        return [];
+      }
+      return rows.map((row) => Object.assign({}, row, {
+        runtimeType: this.normalizeRuntimeType(row && row.runtimeType),
+      }));
     },
 
   }
