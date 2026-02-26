@@ -23,3 +23,7 @@ docs/.tmp_docx_extract/
 
 # Local debug screenshots
 temp/
+
+# Office temp lock files
+~$*.docx
+~$*.doc
