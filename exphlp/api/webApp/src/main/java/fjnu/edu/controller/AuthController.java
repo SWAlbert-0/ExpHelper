@@ -83,6 +83,12 @@ public class AuthController {
             userInfo.setPassword(passwordService.encode(request.getPassword()));
             platMgrService.updateUserById(userInfo);
         }
+        // 角色规范化：默认仅admin账号为管理员，其它账号默认普通用户。
+        Integer normalizedRole = normalizeRole(userInfo);
+        if (!Objects.equals(userInfo.getRole(), normalizedRole)) {
+            userInfo.setRole(normalizedRole);
+            platMgrService.updateUserById(userInfo);
+        }
 
         AuthUser authUser = new AuthUser(userInfo.getUserId(), userInfo.getUserName(), userInfo.getRole());
         String token = jwtUtil.generateToken(authUser);
@@ -151,7 +157,7 @@ public class AuthController {
         user.put("unread_msg_count", 0);
 
         Map<String, Object> data = new HashMap<>();
-        data.put("roles", Collections.singletonList("ROLE_DEFAULT"));
+        data.put("roles", Collections.singletonList(resolveRoleCode(userInfo.getRole())));
         data.put("permissions", new ArrayList<>());
         data.put("user", user);
         return ApiResponse.ok(request, data);
@@ -215,6 +221,10 @@ public class AuthController {
         userInfo.setWechat(wechat == null ? null : wechat.trim());
         userInfo.setMobile(mobile == null ? null : mobile.trim());
         userInfo.setQq(qq == null ? null : qq.trim());
+        userInfo = ensureUserIdReady(userInfo);
+        if (userInfo == null || !StringUtils.hasText(userInfo.getUserId())) {
+            return ApiResponse.failed(request, 500, "用户标识异常，请联系管理员修复账号后重试", ErrorCode.USER_ID_REQUIRED.code());
+        }
         platMgrService.updateUserById(userInfo);
         log.info("traceId={} userId={} path={} action=updateProfile status=success", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/profile");
         return ApiResponse.ok(request, null);
@@ -239,6 +249,10 @@ public class AuthController {
         if (!passwordService.matches(oldPassword, userInfo.getPassword())) {
             log.warn("traceId={} userId={} path={} errorCode={}", TraceContext.getTraceId(request), userInfo.getUserId(), "/api/auth/password", ErrorCode.PASSWORD_OLD_INVALID.code());
             return ApiResponse.failed(request, 401, "旧密码错误", ErrorCode.PASSWORD_OLD_INVALID.code());
+        }
+        userInfo = ensureUserIdReady(userInfo);
+        if (userInfo == null || !StringUtils.hasText(userInfo.getUserId())) {
+            return ApiResponse.failed(request, 500, "用户标识异常，请联系管理员修复账号后重试", ErrorCode.USER_ID_REQUIRED.code());
         }
         userInfo.setPassword(passwordService.encode(newPassword));
         clearRememberToken(userInfo, true);
@@ -335,10 +349,13 @@ public class AuthController {
 
     private UserInfo currentUser(HttpServletRequest request) {
         AuthUser authUser = (AuthUser) request.getAttribute("authUser");
-        if (authUser == null || !StringUtils.hasText(authUser.getUserId())) {
+        if (authUser == null) {
             return null;
         }
-        UserInfo userInfo = platMgrService.getUserById(authUser.getUserId());
+        UserInfo userInfo = null;
+        if (StringUtils.hasText(authUser.getUserId())) {
+            userInfo = platMgrService.getUserById(authUser.getUserId());
+        }
         if (userInfo == null && StringUtils.hasText(authUser.getUserName())) {
             // Compatibility fallback for historical data where _id mapping is inconsistent.
             userInfo = platMgrService.getUserByName(authUser.getUserName());
@@ -435,6 +452,39 @@ public class AuthController {
         } catch (Exception ex) {
             return "unknown";
         }
+    }
+
+    private String resolveRoleCode(Integer role) {
+        if (role != null && role == 1) {
+            return "ROLE_ADMIN";
+        }
+        return "ROLE_DEFAULT";
+    }
+
+    private Integer normalizeRole(UserInfo userInfo) {
+        if (userInfo == null) {
+            return 0;
+        }
+        String userName = userInfo.getUserName() == null ? "" : userInfo.getUserName().trim();
+        if ("admin".equalsIgnoreCase(userName)) {
+            return 1;
+        }
+        return 0;
+    }
+
+    private UserInfo ensureUserIdReady(UserInfo userInfo) {
+        if (userInfo == null) {
+            return null;
+        }
+        if (StringUtils.hasText(userInfo.getUserId())) {
+            return userInfo;
+        }
+        if (!StringUtils.hasText(userInfo.getUserName())) {
+            return userInfo;
+        }
+        // 历史脏数据兜底：先尝试修复空ID记录，再按用户名重新加载
+        platMgrService.repairInvalidUserIds();
+        return platMgrService.getUserByName(userInfo.getUserName());
     }
 
     private Path resolveJarPath() {

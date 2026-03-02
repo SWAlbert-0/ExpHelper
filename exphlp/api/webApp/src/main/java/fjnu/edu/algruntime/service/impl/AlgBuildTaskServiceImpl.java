@@ -1,5 +1,8 @@
 package fjnu.edu.algruntime.service.impl;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import fjnu.edu.algruntime.exception.AlgBuildValidationException;
 import fjnu.edu.algruntime.entity.AlgBuildTask;
 import fjnu.edu.algruntime.service.AlgBuildTaskService;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
@@ -7,12 +10,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -23,11 +28,17 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 @Service
 public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
@@ -35,13 +46,15 @@ public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
     private static final DateTimeFormatter VERSION_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final MongoTemplate mongoTemplate;
+    private final ObjectMapper objectMapper;
     private final ExecutorService executor = Executors.newFixedThreadPool(2);
 
     @Value("${alg.build.work-dir:temp/alg-build}")
     private String buildWorkDir;
 
-    public AlgBuildTaskServiceImpl(MongoTemplate mongoTemplate) {
+    public AlgBuildTaskServiceImpl(MongoTemplate mongoTemplate, ObjectMapper objectMapper) {
         this.mongoTemplate = mongoTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -63,6 +76,15 @@ public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
             Files.createDirectories(taskDir);
             Path target = taskDir.resolve("source.zip");
             Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+            ValidationResult validation = validateSourcePackage(algInfo, target);
+            if (!validation.getErrors().isEmpty()) {
+                throw new AlgBuildValidationException(
+                        "源码包校验失败: " + validation.getErrors().get(0),
+                        "VALIDATE",
+                        validation.buildFixHints(),
+                        validation.toContractCheck()
+                );
+            }
 
             AlgBuildTask task = new AlgBuildTask();
             task.setTaskId(taskId);
@@ -73,11 +95,14 @@ public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
             task.setVersion(version);
             task.setSourceZipPath(target.toAbsolutePath().toString());
             task.setStatus("PENDING");
+            task.setPhase("VALIDATE_PASSED");
             task.setCreatedAt(System.currentTimeMillis());
             task.setTraceId(traceId == null ? "" : traceId);
             task.setLogPath(taskDir.resolve("build.log").toAbsolutePath().toString());
             task.setImageName("exphlp-user-alg-" + safeToken(algInfo.getAlgId()) + ":" + version.toLowerCase(Locale.ROOT));
-            task.setContainerName("c_user_alg_" + safeToken(algInfo.getAlgId()));
+            task.setContainerName(buildContainerName(algInfo.getServiceName(), algInfo.getAlgId()));
+            task.setContractCheck(validation.toContractCheck());
+            task.setFixHints(validation.buildFixHints());
             mongoTemplate.save(task, COLLECTION);
             return task;
         } catch (IOException e) {
@@ -94,7 +119,7 @@ public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
         if ("RUNNING".equalsIgnoreCase(task.getStatus())) {
             return task;
         }
-        updateState(taskId, "RUNNING", "STARTED", "", System.currentTimeMillis(), 0L);
+        updateState(taskId, "RUNNING", "STARTED", "", "BUILD_AND_START", Collections.emptyList(), System.currentTimeMillis(), 0L);
         executor.submit(() -> runBuildTask(taskId, traceId));
         return getTask(taskId);
     }
@@ -106,6 +131,28 @@ public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
         }
         Query q = new Query(Criteria.where("_id").is(taskId));
         return mongoTemplate.findOne(q, AlgBuildTask.class, COLLECTION);
+    }
+
+    @Override
+    public AlgBuildTask getLatestTaskByAlgId(String algId) {
+        if (!StringUtils.hasText(algId)) {
+            return null;
+        }
+        Query q = new Query(Criteria.where("algId").is(algId))
+                .with(Sort.by(Sort.Direction.DESC, "createdAt"))
+                .limit(1);
+        List<AlgBuildTask> tasks = mongoTemplate.find(q, AlgBuildTask.class, COLLECTION);
+        return tasks.isEmpty() ? null : tasks.get(0);
+    }
+
+    @Override
+    public void updateContainerName(String taskId, String containerName) {
+        if (!StringUtils.hasText(taskId) || !StringUtils.hasText(containerName)) {
+            return;
+        }
+        Query q = new Query(Criteria.where("_id").is(taskId));
+        Update u = new Update().set("containerName", containerName.trim());
+        mongoTemplate.updateFirst(q, u, COLLECTION);
     }
 
     @Override
@@ -152,16 +199,18 @@ public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
             }
             int exit = p.waitFor();
             if (exit == 0) {
-                updateState(taskId, "SUCCESS", "OK", "", 0L, System.currentTimeMillis());
+                updateState(taskId, "SUCCESS", "OK", "", "CHECK_PASSED", Collections.emptyList(), 0L, System.currentTimeMillis());
             } else {
-                updateState(taskId, "FAILED", "ALG_BUILD_FAILED", "构建或启动失败，请查看日志", 0L, System.currentTimeMillis());
+                updateState(taskId, "FAILED", "ALG_BUILD_FAILED", "构建或启动失败，请查看日志",
+                        "FAILED", defaultFixHints(task, "ALG_BUILD_FAILED"), 0L, System.currentTimeMillis());
             }
         } catch (Exception ex) {
             try {
                 appendLog(logPath, "exception=" + ex.getMessage());
             } catch (Exception ignored) {
             }
-            updateState(taskId, "FAILED", "ALG_BUILD_FAILED", ex.getMessage(), 0L, System.currentTimeMillis());
+            updateState(taskId, "FAILED", "ALG_BUILD_FAILED", ex.getMessage(),
+                    "FAILED", defaultFixHints(task, "ALG_BUILD_FAILED"), 0L, System.currentTimeMillis());
         }
     }
 
@@ -218,12 +267,17 @@ public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
         return cmd;
     }
 
-    private void updateState(String taskId, String status, String errorCode, String errorMessage, long startedAt, long finishedAt) {
+    private void updateState(String taskId, String status, String errorCode, String errorMessage, String phase,
+                             List<String> fixHints, long startedAt, long finishedAt) {
         Query q = new Query(Criteria.where("_id").is(taskId));
         Update u = new Update()
                 .set("status", status)
                 .set("errorCode", errorCode)
-                .set("errorMessage", errorMessage == null ? "" : errorMessage);
+                .set("errorMessage", errorMessage == null ? "" : errorMessage)
+                .set("phase", phase == null ? "" : phase);
+        if (fixHints != null) {
+            u.set("fixHints", fixHints);
+        }
         if (startedAt > 0) {
             u.set("startedAt", startedAt);
         }
@@ -251,9 +305,186 @@ public class AlgBuildTaskServiceImpl implements AlgBuildTaskService {
         return text.replaceAll("[^a-zA-Z0-9_-]", "_");
     }
 
+    private String buildContainerName(String serviceName, String algId) {
+        String serviceToken = safeToken(StringUtils.hasText(serviceName) ? serviceName.toLowerCase(Locale.ROOT) : "unknown");
+        String idToken = safeToken(algId);
+        String shortId = idToken.length() <= 8 ? idToken : idToken.substring(0, 8);
+        return "c_alg_" + serviceToken + "_" + shortId;
+    }
+
     private void appendLog(Path path, String line) throws IOException {
         String output = "[" + System.currentTimeMillis() + "] " + line + System.lineSeparator();
         Files.write(path, output.getBytes(StandardCharsets.UTF_8),
                 java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+    }
+
+    private ValidationResult validateSourcePackage(AlgInfo algInfo, Path zipPath) throws IOException {
+        ValidationResult result = new ValidationResult();
+        result.runtimeType = normalizeRuntime(algInfo == null ? null : algInfo.getRuntimeType());
+        result.algServiceName = trimOrEmpty(algInfo == null ? null : algInfo.getServiceName());
+        if (!Files.exists(zipPath)) {
+            result.errors.add("源码包不存在");
+            return result;
+        }
+
+        try (ZipFile zipFile = new ZipFile(zipPath.toFile(), StandardCharsets.UTF_8)) {
+            Enumeration<? extends ZipEntry> entries = zipFile.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                String name = normalizeEntryName(entry.getName());
+                result.entries.add(name);
+                if (name.endsWith("exphlp-alg.json") && result.metaEntryName.isEmpty()) {
+                    result.metaEntryName = name;
+                    byte[] bytes = zipFile.getInputStream(entry).readAllBytes();
+                    result.metaNode = objectMapper.readTree(new ByteArrayInputStream(bytes));
+                }
+            }
+        }
+
+        if (result.metaNode == null) {
+            result.errors.add("缺少 exphlp-alg.json");
+            result.hints.add("请在源码包根目录提供 exphlp-alg.json");
+            return result;
+        }
+
+        String metaRuntime = trimOrEmpty(readText(result.metaNode, "runtimeType")).toLowerCase(Locale.ROOT);
+        String metaServiceName = trimOrEmpty(readText(result.metaNode, "serviceName"));
+        result.metaRuntimeType = metaRuntime;
+        result.metaServiceName = metaServiceName;
+        result.metaPort = readInt(result.metaNode, "port", 18090);
+        result.metaEntry = trimOrEmpty(readText(result.metaNode, "entry"));
+
+        if (!metaRuntime.isEmpty() && !metaRuntime.equals(result.runtimeType)) {
+            result.errors.add("runtimeType不一致: 算法库=" + result.runtimeType + "，源码包=" + metaRuntime);
+            result.hints.add("请统一算法库运行时和 exphlp-alg.json 的 runtimeType");
+        }
+        if (!metaServiceName.isEmpty() && !result.algServiceName.isEmpty() && !metaServiceName.equals(result.algServiceName)) {
+            result.errors.add("serviceName不一致: 算法库=" + result.algServiceName + "，源码包=" + metaServiceName);
+            result.hints.add("请统一算法库服务名和 exphlp-alg.json 的 serviceName");
+        }
+
+        if ("java".equals(result.runtimeType)) {
+            if (!existsAny(result.entries, "pom.xml")) {
+                result.errors.add("Java项目缺少 pom.xml");
+                result.hints.add("请上传标准 Maven 工程源码包，并包含 pom.xml");
+            }
+        } else {
+            if (!existsAny(result.entries, "requirements.txt") && !existsAny(result.entries, "pyproject.toml")) {
+                result.errors.add("Python项目缺少 requirements.txt 或 pyproject.toml");
+                result.hints.add("请补充依赖定义文件，确保容器构建可安装依赖");
+            }
+            if (result.metaEntry.isEmpty()) {
+                result.hints.add("建议在 exphlp-alg.json 中配置 entry（例如 main:app）");
+            }
+        }
+        if (result.metaPort <= 0 || result.metaPort > 65535) {
+            result.errors.add("端口配置非法: " + result.metaPort);
+            result.hints.add("请在 exphlp-alg.json 中将 port 设置为 1-65535 的整数");
+        }
+        return result;
+    }
+
+    private List<String> defaultFixHints(AlgBuildTask task, String reasonCode) {
+        List<String> hints = new ArrayList<>();
+        if ("ALG_BUILD_FAILED".equals(reasonCode)) {
+            hints.add("查看 build.log 末尾日志，定位构建失败阶段");
+            hints.add("确认 Docker 可用且网络可访问 Maven/PIP 依赖源");
+            hints.add("确认算法服务名与 Nacos 注册名一致");
+            if (task != null && "python".equalsIgnoreCase(task.getRuntimeType())) {
+                hints.add("Python 工程请确认 requirements.txt/pyproject.toml 可安装");
+            }
+        }
+        return hints;
+    }
+
+    private String readText(JsonNode node, String key) {
+        if (node == null || key == null || key.isEmpty()) {
+            return "";
+        }
+        JsonNode value = node.get(key);
+        return value == null ? "" : value.asText("");
+    }
+
+    private int readInt(JsonNode node, String key, int defaultValue) {
+        if (node == null || key == null || key.isEmpty()) {
+            return defaultValue;
+        }
+        JsonNode value = node.get(key);
+        if (value == null || value.isNull()) {
+            return defaultValue;
+        }
+        if (value.isInt() || value.isLong()) {
+            return value.asInt(defaultValue);
+        }
+        try {
+            return Integer.parseInt(value.asText(String.valueOf(defaultValue)).trim());
+        } catch (Exception ignored) {
+            return defaultValue;
+        }
+    }
+
+    private boolean existsAny(List<String> entries, String suffix) {
+        if (entries == null || suffix == null || suffix.isEmpty()) {
+            return false;
+        }
+        String normalized = suffix.toLowerCase(Locale.ROOT);
+        for (String name : entries) {
+            if (name != null && name.toLowerCase(Locale.ROOT).endsWith(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeEntryName(String name) {
+        if (name == null) {
+            return "";
+        }
+        return name.replace("\\", "/");
+    }
+
+    private String trimOrEmpty(String text) {
+        return text == null ? "" : text.trim();
+    }
+
+    private static final class ValidationResult {
+        private final List<String> entries = new ArrayList<>();
+        private final List<String> errors = new ArrayList<>();
+        private final List<String> hints = new ArrayList<>();
+        private String metaEntryName = "";
+        private JsonNode metaNode;
+        private String runtimeType = "java";
+        private String algServiceName = "";
+        private String metaRuntimeType = "";
+        private String metaServiceName = "";
+        private int metaPort = 18090;
+        private String metaEntry = "";
+
+        List<String> getErrors() {
+            return errors;
+        }
+
+        List<String> buildFixHints() {
+            if (hints.isEmpty()) {
+                return Collections.singletonList("请检查源码包结构与 exphlp-alg.json 配置");
+            }
+            return hints;
+        }
+
+        Map<String, Object> toContractCheck() {
+            Map<String, Object> map = new HashMap<>();
+            map.put("metaEntryName", metaEntryName);
+            map.put("runtimeType", runtimeType);
+            map.put("algServiceName", algServiceName);
+            map.put("metaRuntimeType", metaRuntimeType);
+            map.put("metaServiceName", metaServiceName);
+            map.put("metaPort", metaPort);
+            map.put("metaEntry", metaEntry);
+            map.put("errors", errors);
+            return map;
+        }
     }
 }

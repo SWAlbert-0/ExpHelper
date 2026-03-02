@@ -1,8 +1,11 @@
 package fjnu.edu.controller;
 
 import fjnu.edu.auth.ApiResponse;
+import fjnu.edu.auth.AuthUser;
 import fjnu.edu.auth.ErrorCode;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
+import fjnu.edu.platmgr.entity.UserInfo;
+import fjnu.edu.platmgr.service.PlatMgrService;
 import fjnu.edu.probInstMgr.entity.ProbDeleteResult;
 import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.probInstMgr.service.ProbInstMgrService;
@@ -31,13 +34,17 @@ public class ProbInstMgrCtrl {
 
     @Autowired
     ObjectMapper objectMapper;
+    @Autowired
+    PlatMgrService platMgrService;
 
     @PostMapping("/addProblem")
-    public void addProbInst(@RequestBody ProbInst probInst) {
+    public Map<String, Object> addProbInst(@RequestBody ProbInst probInst, HttpServletRequest request) {
         if (probInst == null || !StringUtils.hasText(probInst.getInstName())) {
-            throw new IllegalArgumentException("问题实例名称不能为空");
+            return ApiResponse.failed(request, 400, "问题实例名称不能为空", ErrorCode.INVALID_ARGUMENT.code());
         }
+        bindOwner(probInst, currentAuth(request));
         probInstMgrService.addProbInst(probInst);
+        return ApiResponse.ok(request, null, "添加成功");
     }
 
     @PostMapping("/importProblemsJson")
@@ -75,6 +82,7 @@ public class ProbInstMgrCtrl {
                         skipped++;
                         continue;
                     }
+                    bindOwner(probInst, currentAuth(request));
                     probInstMgrService.addProbInst(probInst);
                     success++;
                 } catch (Exception ex) {
@@ -102,7 +110,11 @@ public class ProbInstMgrCtrl {
     @PostMapping("/deleteProblemById")
     public Map<String, Object> delProbInstByID (@RequestParam(value = "proId") String proId, HttpServletRequest request) {
         if (!StringUtils.hasText(proId)) {
-            throw new IllegalArgumentException("问题实例ID不能为空");
+            return ApiResponse.failed(request, 400, "问题实例ID不能为空", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        ProbInst current = probInstMgrService.getProbInstByID(proId);
+        if (current != null && !canManageProb(currentAuth(request), current)) {
+            return ApiResponse.failed(request, 403, "仅问题实例创建者或管理员可删除", ErrorCode.AUTH_FORBIDDEN.code());
         }
         long refPlanCount = exePlanMgrService.countPlansByProbInstId(proId);
         if (refPlanCount > 0) {
@@ -132,11 +144,21 @@ public class ProbInstMgrCtrl {
     }
 
     @PostMapping("/updateProblemById")
-    public void updateProbInst(@RequestBody ProbInst probInst){
+    public Map<String, Object> updateProbInst(@RequestBody ProbInst probInst, HttpServletRequest request){
         if (probInst == null || !StringUtils.hasText(probInst.getInstId())) {
-            throw new IllegalArgumentException("问题实例ID不能为空");
+            return ApiResponse.failed(request, 400, "问题实例ID不能为空", ErrorCode.INVALID_ARGUMENT.code());
         }
+        ProbInst current = probInstMgrService.getProbInstByID(probInst.getInstId());
+        if (current == null) {
+            return ApiResponse.failed(request, 404, "问题实例不存在", ErrorCode.INVALID_ARGUMENT.code());
+        }
+        if (!canManageProb(currentAuth(request), current)) {
+            return ApiResponse.failed(request, 403, "仅问题实例创建者或管理员可编辑", ErrorCode.AUTH_FORBIDDEN.code());
+        }
+        probInst.setOwnerUserId(current.getOwnerUserId());
+        probInst.setOwnerUserName(current.getOwnerUserName());
         probInstMgrService.updateProbInst(probInst);
+        return ApiResponse.ok(request, null, "更新成功");
     }
 
     @GetMapping("/getProblems")
@@ -200,6 +222,8 @@ public class ProbInstMgrCtrl {
             return;
         }
         probInst.setInstId(null);
+        probInst.setOwnerUserId(trimOrEmpty(probInst.getOwnerUserId()));
+        probInst.setOwnerUserName(trimOrEmpty(probInst.getOwnerUserName()));
         probInst.setInstName(trimOrEmpty(probInst.getInstName()));
         probInst.setCategoryName(trimOrEmpty(probInst.getCategoryName()));
         probInst.setDirName(trimOrEmpty(probInst.getDirName()));
@@ -210,5 +234,59 @@ public class ProbInstMgrCtrl {
 
     private String trimOrEmpty(String text) {
         return text == null ? "" : text.trim();
+    }
+
+    private AuthUser currentAuth(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        Object authObj = request.getAttribute("authUser");
+        if (authObj instanceof AuthUser) {
+            return (AuthUser) authObj;
+        }
+        return null;
+    }
+
+    private void bindOwner(ProbInst probInst, AuthUser auth) {
+        if (probInst == null || auth == null) {
+            return;
+        }
+        String ownerId = resolveAuthUserId(auth);
+        if (StringUtils.hasText(ownerId)) {
+            probInst.setOwnerUserId(ownerId);
+        }
+        if (StringUtils.hasText(auth.getUserName())) {
+            probInst.setOwnerUserName(auth.getUserName().trim());
+        }
+    }
+
+    private String resolveAuthUserId(AuthUser auth) {
+        if (auth == null) {
+            return "";
+        }
+        if (StringUtils.hasText(auth.getUserId())) {
+            return auth.getUserId().trim();
+        }
+        if (StringUtils.hasText(auth.getUserName())) {
+            UserInfo user = platMgrService.getUserByName(auth.getUserName().trim());
+            if (user != null && StringUtils.hasText(user.getUserId())) {
+                return user.getUserId().trim();
+            }
+        }
+        return "";
+    }
+
+    private boolean canManageProb(AuthUser auth, ProbInst probInst) {
+        if (auth == null) {
+            return false;
+        }
+        if (auth.getRole() != null && auth.getRole() == 1) {
+            return true;
+        }
+        if (probInst == null || !StringUtils.hasText(probInst.getOwnerUserId())) {
+            return false;
+        }
+        String authUserId = resolveAuthUserId(auth);
+        return StringUtils.hasText(authUserId) && authUserId.equals(probInst.getOwnerUserId());
     }
 }

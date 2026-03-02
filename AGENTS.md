@@ -139,6 +139,11 @@ Use separate terminals for backend and frontend.
 - Before completion, run:
   - `powershell -ExecutionPolicy Bypass -File scripts/check-config-doc.ps1`
 
+### 10) Notification Channel Baseline (Version4)
+- Current production notification channel is email.
+- WeChat notification is treated as extension-reserved capability unless explicitly implemented in code.
+- Any docs/paper text must avoid claiming WeChat delivery is already implemented.
+
 ### 10) Long-Term Dev Log Rule (Mandatory)
 - `docs/dev/开发日志.md` is the single long-term engineering log.
 - Do not create parallel stage logs like `阶段任务-*.md`; append the phase summary into `开发日志.md`.
@@ -153,3 +158,45 @@ Use separate terminals for backend and frontend.
   - `docs/dev/维护手册.md`,
   - `docs/user/算法服务接入与容器化指南.md`.
 - If runtime/deploy configuration is changed, update `docs/dev/配置清单.md` in the same commit.
+
+### 12) User Docs Governance Rule (Mandatory)
+- `docs/user/` is restricted to these long-term documents only:
+  - `docs/user/README.md`
+  - `docs/user/快速上手-从部署到执行.md`
+  - `docs/user/算法服务接入与容器化指南.md`
+  - `docs/user/常见问题与排障.md`
+- Do not create parallel user guides like “新版部署方法/真实案例测试文档/容器说明与职责清单”.
+- For any user-facing flow change, update exactly one authoritative target:
+  - onboarding/deploy/use flow -> `快速上手-从部署到执行.md`
+  - custom algorithm integration -> `算法服务接入与容器化指南.md`
+  - troubleshooting and error handling -> `常见问题与排障.md`
+
+### 13) Dev Docs Governance Rule (Mandatory)
+- `docs/dev/` is restricted to these long-term documents only:
+  - `docs/dev/开发日志.md`
+  - `docs/dev/维护手册.md`
+  - `docs/dev/配置清单.md`
+  - `docs/dev/错误码映射.md`
+  - `docs/dev/Nacos功能与开发说明.md`
+  - `docs/dev/MongoDB功能与开发说明.md`
+  - `docs/dev/RabbitMQ功能与开发说明.md`
+- Historical/phase-specific documents (for example `*-v2`, delivery notes, legacy inventories) must be placed under `docs/archive/dev/` and must not remain in `docs/dev/`.
+- Update mapping:
+  - runtime/deploy/script operation changes -> `docs/dev/维护手册.md`
+  - runtime/deploy config key changes -> `docs/dev/配置清单.md` (and run `scripts/check-config-doc.ps1`)
+  - error response or reasonCode semantics changes -> `docs/dev/错误码映射.md`
+  - nacos service discovery/precheck/registration/health-check changes -> `docs/dev/Nacos功能与开发说明.md`
+  - mongodb collection/schema/id-compat/index/init-script changes -> `docs/dev/MongoDB功能与开发说明.md`
+  - rabbitmq queue/exchange/listener/message-route changes -> `docs/dev/RabbitMQ功能与开发说明.md`
+  - completed iteration summary and verification evidence -> `docs/dev/开发日志.md`
+
+### 14) Algorithm Template Governance Rule (Mandatory)
+- Canonical algorithm templates are maintained only under:
+  - `docs/templates/java-springboot-nacos`
+  - `docs/templates/python-fastapi-nacos`
+- Do not create duplicate template copies in `docs/user/` or scattered `docs/cases/*` unless they are case-specific runnable examples.
+- If upload/build contract changes (for example `exphlp-alg.json` fields or required endpoints), update in the same delivery:
+  - `docs/templates/*`
+  - `docs/user/算法服务接入与容器化指南.md`
+  - `docs/dev/维护手册.md`
+  - `docs/dev/开发日志.md`

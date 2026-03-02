@@ -38,6 +38,7 @@ ensure_cmd() {
 ensure_cmd docker
 ensure_cmd unzip
 ensure_cmd curl
+ensure_cmd jq
 
 [ -n "$TASK_ID" ] || fail "TASK_ID empty"
 [ -n "$ALG_ID" ] || fail "ALG_ID empty"
@@ -62,6 +63,10 @@ if [ ! -f "$meta_path" ]; then
   [ -n "$alt_meta" ] || fail "missing exphlp-alg.json"
   meta_path="$alt_meta"
 fi
+project_dir="$(dirname "$meta_path")"
+if [ ! -d "$project_dir" ]; then
+  fail "project dir not found: $project_dir"
+fi
 
 meta_runtime="$(jq -r '.runtimeType // ""' "$meta_path" 2>/dev/null || true)"
 if [ -n "$meta_runtime" ] && [ "$meta_runtime" != "$RUNTIME_TYPE" ]; then
@@ -77,8 +82,8 @@ if ! docker network ls --format '{{.Name}}' | grep -q "^$network_name$"; then
 fi
 
 if [ "$RUNTIME_TYPE" = "java" ]; then
-  [ -f "$src_dir/pom.xml" ] || fail "java project missing pom.xml"
-  cat > "$src_dir/Dockerfile.generated" <<EOF
+  [ -f "$project_dir/pom.xml" ] || fail "java project missing pom.xml"
+  cat > "$project_dir/Dockerfile.generated" <<EOF
 FROM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /build
 COPY . /build
@@ -91,10 +96,11 @@ ENV SERVER_PORT=$port
 ENTRYPOINT ["java","-jar","/app/app.jar"]
 EOF
 else
-  if [ ! -f "$src_dir/requirements.txt" ] && [ ! -f "$src_dir/pyproject.toml" ]; then
+  if [ ! -f "$project_dir/requirements.txt" ] && [ ! -f "$project_dir/pyproject.toml" ]; then
     fail "python project missing requirements.txt or pyproject.toml"
   fi
-  cat > "$src_dir/start_with_nacos.py" <<EOF
+  cat > "$project_dir/start_with_nacos.py" <<EOF
+import json
 import os
 import socket
 import threading
@@ -102,8 +108,23 @@ import time
 import requests
 import uvicorn
 
+NACOS_HTTP = requests.Session()
+NACOS_HTTP.trust_env = False
+
 def local_ip():
-    return socket.gethostbyname(socket.gethostname())
+    forced = os.getenv("ALG_REGISTER_IP", "").strip()
+    if forced:
+        return forced
+    try:
+        for item in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if item and not item.startswith("127."):
+                return item
+    except Exception:
+        pass
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except Exception:
+        return "127.0.0.1"
 
 def register_nacos():
     nacos = os.getenv("NACOS_SERVER_ADDR", "host.docker.internal:8848")
@@ -114,51 +135,68 @@ def register_nacos():
     p = int(os.getenv("ALG_PORT", "$port"))
     namespace_id = os.getenv("NACOS_NAMESPACE", "public")
     group_name = os.getenv("NACOS_GROUP", "DEFAULT_GROUP")
-    requests.post(f"{nacos}/nacos/v1/ns/instance", data={
-        "serviceName": service_name,
-        "ip": ip,
-        "port": p,
-        "namespaceId": namespace_id,
-        "groupName": group_name,
-        "healthy": "true",
-        "enabled": "true",
-        "ephemeral": "true"
-    }, timeout=5)
+
     while True:
         try:
-            requests.put(f"{nacos}/nacos/v1/ns/instance/beat", data={
+            register_resp = NACOS_HTTP.post(f"{nacos}/nacos/v1/ns/instance", data={
                 "serviceName": service_name,
                 "ip": ip,
                 "port": p,
                 "namespaceId": namespace_id,
                 "groupName": group_name,
-                "beat": '{"ip":"%s","port":%d,"healthy":true}' % (ip, p)
+                "healthy": "true",
+                "enabled": "true",
+                "ephemeral": "true"
             }, timeout=5)
-        except Exception:
-            pass
-        time.sleep(5)
+            register_resp.raise_for_status()
+
+            while True:
+                beat = json.dumps({
+                    "serviceName": service_name,
+                    "ip": ip,
+                    "port": p,
+                    "healthy": True
+                }, separators=(",", ":"))
+                beat_resp = NACOS_HTTP.put(f"{nacos}/nacos/v1/ns/instance/beat", data={
+                    "serviceName": service_name,
+                    "ip": ip,
+                    "port": p,
+                    "namespaceId": namespace_id,
+                    "groupName": group_name,
+                    "ephemeral": "true",
+                    "beat": beat
+                }, timeout=5)
+                beat_resp.raise_for_status()
+                time.sleep(5)
+        except Exception as ex:
+            print(f"[NACOS] register/beat failed: {ex}", flush=True)
+            time.sleep(3)
 
 if __name__ == "__main__":
     threading.Thread(target=register_nacos, daemon=True).start()
     uvicorn.run("$entry", host="0.0.0.0", port=int(os.getenv("ALG_PORT", "$port")))
 EOF
-  cat > "$src_dir/Dockerfile.generated" <<EOF
+  cat > "$project_dir/Dockerfile.generated" <<EOF
 FROM python:3.11-slim
 WORKDIR /app
 COPY . /app
-RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir uvicorn fastapi requests
+RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; elif [ -f pyproject.toml ]; then pip install --no-cache-dir .; else echo "missing requirements.txt or pyproject.toml" && exit 1; fi && pip install --no-cache-dir uvicorn fastapi requests
 ENV ALG_PORT=$port
 CMD ["python","start_with_nacos.py"]
 EOF
 fi
 
 echo "[INFO] docker build image: $IMAGE_NAME"
-docker build -t "$IMAGE_NAME" -f "$src_dir/Dockerfile.generated" "$src_dir" || fail "docker build failed"
+docker build \
+  --label "exphlp.alg.id=$ALG_ID" \
+  --label "exphlp.alg.service=$SERVICE_NAME" \
+  --label "exphlp.alg.runtime=$RUNTIME_TYPE" \
+  -t "$IMAGE_NAME" -f "$project_dir/Dockerfile.generated" "$project_dir" || fail "docker build failed"
 
 echo "[INFO] remove old container: $CONTAINER_NAME"
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
-run_args="run -d --name $CONTAINER_NAME -e ALG_PORT=$port -e ALG_SERVICE_NAME=$SERVICE_NAME -e NACOS_NAMESPACE=public -e NACOS_GROUP=DEFAULT_GROUP"
+run_args="run -d --name $CONTAINER_NAME --label exphlp.alg.id=$ALG_ID --label exphlp.alg.service=$SERVICE_NAME --label exphlp.alg.runtime=$RUNTIME_TYPE -e ALG_PORT=$port -e ALG_SERVICE_NAME=$SERVICE_NAME -e NACOS_NAMESPACE=public -e NACOS_GROUP=DEFAULT_GROUP -e HTTP_PROXY= -e HTTPS_PROXY= -e http_proxy= -e https_proxy= -e NO_PROXY=localhost,127.0.0.1,nacos,mongodb,rabbitmq -e no_proxy=localhost,127.0.0.1,nacos,mongodb,rabbitmq"
 if [ -n "$network_name" ]; then
   run_args="$run_args -e NACOS_SERVER_ADDR=nacos:8848 --network $network_name"
 else

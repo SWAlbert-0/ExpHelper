@@ -8,6 +8,7 @@ import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import com.mongodb.client.result.UpdateResult;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -82,5 +83,37 @@ class ExePlanMgrDaoTest {
         assertTrue(result.isBlocked());
         assertTrue(result.isNoop());
         verify(mongoTemplate, never()).remove(any(Query.class), eq("exePlanMgr"));
+    }
+
+    @Test
+    void updateExePlanById_requiresNonExecutionState() {
+        ExePlan plan = new ExePlan();
+        plan.setPlanId("6991e1f0392d9d656cb30553");
+        plan.setExeState(Constant.IN_EXECUTION);
+        when(mongoTemplate.updateFirst(any(Query.class), any(org.springframework.data.mongodb.core.query.Update.class), eq(ExePlan.class), eq("exePlanMgr")))
+                .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
+
+        dao.updateExePlanById(plan);
+
+        ArgumentCaptor<Query> captor = ArgumentCaptor.forClass(Query.class);
+        verify(mongoTemplate).updateFirst(captor.capture(), any(org.springframework.data.mongodb.core.query.Update.class), eq(ExePlan.class), eq("exePlanMgr"));
+        Document query = captor.getValue().getQueryObject();
+        assertTrue(query.toJson().contains("\"exeState\""));
+    }
+
+    @Test
+    void updateExePlanExecutionById_doesNotRequireNonExecutionState() {
+        ExePlan plan = new ExePlan();
+        plan.setPlanId("6991e1f0392d9d656cb30553");
+        plan.setExeState(Constant.NORMAL_TERMINATION);
+        when(mongoTemplate.updateFirst(any(Query.class), any(org.springframework.data.mongodb.core.query.Update.class), eq(ExePlan.class), eq("exePlanMgr")))
+                .thenReturn(UpdateResult.acknowledged(1L, 1L, null));
+
+        dao.updateExePlanExecutionById(plan);
+
+        ArgumentCaptor<Query> captor = ArgumentCaptor.forClass(Query.class);
+        verify(mongoTemplate).updateFirst(captor.capture(), any(org.springframework.data.mongodb.core.query.Update.class), eq(ExePlan.class), eq("exePlanMgr"));
+        Document query = captor.getValue().getQueryObject();
+        assertFalse(query.toJson().contains("\"exeState\""));
     }
 }

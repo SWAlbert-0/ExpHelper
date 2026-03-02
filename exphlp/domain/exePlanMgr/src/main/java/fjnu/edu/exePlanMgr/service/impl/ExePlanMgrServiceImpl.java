@@ -27,6 +27,16 @@ public class ExePlanMgrServiceImpl implements ExePlanMgrService {
     }
 
     @Override
+    public List<ExePlan> getExePlans(int pageNum, int pageSize, String scope) {
+        return exePlanMgrDao.getExePlans(pageNum, pageSize, scope);
+    }
+
+    @Override
+    public List<ExePlan> getExePlans(int pageNum, int pageSize, String scope, String planName, Integer exeState, Long exeStartTime, Long exeEndTime) {
+        return exePlanMgrDao.getExePlans(pageNum, pageSize, scope, planName, exeState, exeStartTime, exeEndTime);
+    }
+
+    @Override
     public String addExePlan(ExePlan exeplan) throws Exception {
         return exePlanMgrDao.addExePlan(exeplan);
     }
@@ -53,8 +63,22 @@ public class ExePlanMgrServiceImpl implements ExePlanMgrService {
 
     @Override
     public long countAllExePlans() {
+        return countAllExePlans(null);
+    }
+
+    @Override
+    public long countAllExePlans(String scope) {
         try {
-            return exePlanMgrDao.countAllExePlans();
+            return exePlanMgrDao.countAllExePlans(scope);
+        } catch (Exception e) {
+            throw new BusinessException("获取执行计划个数失败");
+        }
+    }
+
+    @Override
+    public long countAllExePlans(String scope, String planName, Integer exeState, Long exeStartTime, Long exeEndTime) {
+        try {
+            return exePlanMgrDao.countAllExePlans(scope, planName, exeState, exeStartTime, exeEndTime);
         } catch (Exception e) {
             throw new BusinessException("获取执行计划个数失败");
         }
@@ -98,6 +122,11 @@ public class ExePlanMgrServiceImpl implements ExePlanMgrService {
     @Override
     public List<ExePlanLog> listPlanLogs(String planId, String executionId, int limit) {
         return exePlanMgrDao.listPlanLogs(planId, executionId, limit);
+    }
+
+    @Override
+    public boolean repairExecutionStateFromLogs(String planId, String executionId) {
+        return exePlanMgrDao.repairExecutionStateFromLogs(planId, executionId);
     }
 
 }

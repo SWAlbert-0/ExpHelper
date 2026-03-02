@@ -217,6 +217,7 @@
             :options="options"
             @update:search="onSearchUpdate"
             @add="addExePlan"
+            @open-guide="openPlanGuide"
             @open-wizard="wizardVisible = true"
             @open-readiness="runtimeReadinessVisible = true"
             @delete-batch="deleteBatchExePlan"
@@ -243,17 +244,17 @@
             <el-table-column label="操作" align="center" width="430">
               <template slot-scope="scope">
                 <el-button type="success" size="mini" icon="el-icon-check" @click="doExePlan(scope.row)"
-                           :disabled="scope.row.exeState != '未执行'">执行
+                           :disabled="scope.row.exeState != '未执行' || !canExecutePlan(scope.row)">执行
                 </el-button>
                 <el-button type="warning" size="mini" icon="el-icon-refresh" @click="reExecutePlan(scope.row)"
-                           :disabled="scope.row.exeState != '异常结束'">重新执行
+                           :disabled="scope.row.exeState != '异常结束' || !canExecutePlan(scope.row)">重新执行
                 </el-button>
                 <el-button type="primary" size="mini" icon="el-icon-view" @click="viewExePlan(scope.row)">查看
                 </el-button>
                 <el-button type="primary" size="mini" icon="el-icon-edit" @click="editExePlan(scope.row)"
-                           :disabled="scope.row.exeState != '未执行'">编辑
+                           :disabled="scope.row.exeState != '未执行' || !canEditPlan(scope.row)">编辑
                 </el-button>
-                <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteExePlan(scope.row)">删除
+                <el-button type="danger" size="mini" icon="el-icon-delete" :disabled="!canDeletePlan(scope.row)" @click="deleteExePlan(scope.row)">删除
                 </el-button>
               </template>
             </el-table-column>
@@ -558,7 +559,7 @@
               <el-button
                 size="mini"
                 type="warning"
-                :disabled="showedExePlan.exeState !== '异常结束'"
+                :disabled="showedExePlan.exeState !== '异常结束' || !canExecutePlan(showedExePlan)"
                 @click="reExecutePlan(showedExePlan)"
               >重新执行</el-button>
               <span class="log-plan-state">计划状态：{{ showedExePlan.exeState }}</span>
@@ -579,6 +580,10 @@
       :alg-infos="algInfos"
       @open-wizard="openWizardFromReadiness"
     />
+    <manual-doc-dialog
+      :visible.sync="manualDialogVisible"
+      :page-key="manualPageKey"
+    />
   </div>
 
 
@@ -589,6 +594,7 @@
 import {getProbInstById, getProbInstList} from "@/api/exphlp/probInstMgr";
 import {getAlgs} from "@/api/exphlp/algLibMgr";
 import {getUserList} from "@/api/exphlp/platMgr";
+import { getProfile } from "@/api/auth";
 import {
   addExePlan, countAllExePlans,
   getExePlanByName,
@@ -598,6 +604,7 @@ import {
 import ExecutionWizard from "@/views/planManage/components/ExecutionWizard";
 import RuntimeReadinessDialog from "@/views/planManage/components/RuntimeReadinessDialog";
 import PlanListHeader from "@/views/planManage/components/PlanListHeader";
+import ManualDocDialog from "@/components/ManualDocDialog";
 import { planResultMethods } from "@/views/planManage/modules/planResultMethods";
 import { planLogMethods } from "@/views/planManage/modules/planLogMethods";
 import { planExecutionMethods } from "@/views/planManage/modules/planExecutionMethods";
@@ -610,9 +617,19 @@ import {
   handleSameAlgName as buildAlgDisplayNames,
   hasDuplicateParas as hasDuplicateParasInPlan,
 } from "@/views/planManage/modules/planUiHelpers";
+import { mapGetters } from "vuex";
 
 export default {
-  components: { ExecutionWizard, RuntimeReadinessDialog, PlanListHeader },
+  components: { ExecutionWizard, RuntimeReadinessDialog, PlanListHeader, ManualDocDialog },
+  computed: {
+    ...mapGetters([
+      "roles",
+      "name"
+    ]),
+    isAdmin() {
+      return Array.isArray(this.roles) && this.roles.includes("ROLE_ADMIN");
+    }
+  },
   data() {
     return {
       probInsts: [],
@@ -727,9 +744,14 @@ export default {
       duplicateParaFlag : false,
       wizardVisible: false,
       runtimeReadinessVisible: false,
+      manualDialogVisible: false,
+      manualPageKey: "plan",
+      currentUserId: "",
+      currentUserName: "",
     }
   },
   created() {
+    this.loadCurrentUserProfile();
     this.listProbInsts();
     this.getAlgInfos();
     this.getUserInfos();
@@ -744,6 +766,73 @@ export default {
     this.stopPlanLogPolling();
   },
   methods: {
+    loadCurrentUserProfile() {
+      this.currentUserName = (this.name || "").toString().trim();
+      getProfile().then((response) => {
+        const data = response && response.data ? response.data : {};
+        this.currentUserId = data.userId || "";
+        if (data.username) {
+          this.currentUserName = data.username;
+        }
+      }).catch(() => {});
+    },
+    canOperatePlan(row) {
+      if (!row) {
+        return false;
+      }
+      if (this.isAdmin) {
+        return true;
+      }
+      const ownerUserId = (row.ownerUserId || "").toString().trim();
+      if (ownerUserId) {
+        return !!this.currentUserId && ownerUserId === this.currentUserId;
+      }
+      const ownerUserName = (row.ownerUserName || "").toString().trim();
+      if (ownerUserName) {
+        return !!this.currentUserName && ownerUserName === this.currentUserName;
+      }
+      // 历史无owner的计划默认只允许管理员操作。
+      return false;
+    },
+    canExecutePlan(row) {
+      return this.canOperatePlan(row);
+    },
+    canEditPlan(row) {
+      return this.canOperatePlan(row);
+    },
+    canDeletePlan(row) {
+      return this.canOperatePlan(row);
+    },
+    toStateCode(stateText) {
+      if (!stateText) return null;
+      for (let i = 0; i < this.options.length; i++) {
+        if (this.options[i].value === stateText) {
+          return i + 1;
+        }
+      }
+      return null;
+    },
+    buildPlanQueryParams() {
+      const params = {};
+      if (this.search.planName && this.search.planName.trim()) {
+        params.planName = this.search.planName.trim();
+      }
+      const stateCode = this.toStateCode(this.search.exeState);
+      if (stateCode) {
+        params.exeState = stateCode;
+      }
+      if (this.search.exeStartTime) {
+        params.exeStartTime = normalizeToEpochMsOrZero(this.search.exeStartTime);
+      }
+      if (this.search.exeEndTime) {
+        params.exeEndTime = normalizeToEpochMsOrZero(this.search.exeEndTime);
+      }
+      return params;
+    },
+    hasPlanSearchCondition() {
+      const q = this.buildPlanQueryParams();
+      return Object.keys(q).length > 0;
+    },
     ensureViewState() {
       if (!this.editVisible && !this.viewVisible && !this.showExePlanTableVisible) {
         this.showExePlanTableVisible = true;
@@ -956,27 +1045,15 @@ export default {
     },
 
     getExePlans() {
-      getExePlans(this.pageHelper.currentPageNum, this.pageHelper.pageSize).then(res => {
+      const query = this.buildPlanQueryParams();
+      getExePlans(this.pageHelper.currentPageNum, this.pageHelper.pageSize, "all", query).then(res => {
         this.exePlans = res;
         for (var i = 0; i < this.exePlans.length; i++) this.decoratePlanRow(this.exePlans[i]);
         this.countAllExePlans();
       });
     },
     searchByCondition() {
-      if (this.search.planName == '') {
-        this.$message({type: "error", message: "计划名称不能为空",});
-        return;
-      }
-      this.exePlans = [];
-      getExePlanByName(this.search.planName).then(res => {
-        if (res != '') {
-          this.decoratePlanRow(res);
-          this.pageHelper.totalSize = 1;
-          this.exePlans.push(res);
-        } else {
-          this.pageHelper.totalSize = 0;
-        }
-      });
+      this.getExePlans();
     },
     clearSearchCondition() {
       this.pageHelper.currentPageNum = 1;
@@ -984,19 +1061,19 @@ export default {
       if (this.$refs.userInfos && typeof this.$refs.userInfos.clearSelection === "function") {
         this.$refs.userInfos.clearSelection();
       }
-      this.countAllExePlans();
-      getExePlans(this.pageHelper.currentPageNum, this.pageHelper.pageSize).then(res => {
-        this.exePlans = res;
-        for (var i = 0; i < this.exePlans.length; i++) {
-          this.decoratePlanRow(this.exePlans[i]);
-        }
-      });
       this.search = {
         planName: "",
         exeState: "",
         exeStartTime: "",
         exeEndTime: "",
       };
+      this.countAllExePlans();
+      getExePlans(this.pageHelper.currentPageNum, this.pageHelper.pageSize, "all", {}).then(res => {
+        this.exePlans = res;
+        for (var i = 0; i < this.exePlans.length; i++) {
+          this.decoratePlanRow(this.exePlans[i]);
+        }
+      });
     },
     addExePlan() {
       this.algId = '';
@@ -1265,7 +1342,7 @@ export default {
     },
     handleSizeChange(val) {
       this.pageHelper.pageSize = val
-      if (this.search.planName != "") {
+      if (this.hasPlanSearchCondition()) {
         this.searchByCondition();
       } else {
         this.getExePlans();
@@ -1273,14 +1350,15 @@ export default {
     },
     handleCurrentChange(val) {
       this.pageHelper.currentPageNum = val
-      if (this.search.planName != "") {
+      if (this.hasPlanSearchCondition()) {
         this.searchByCondition();
       } else {
         this.getExePlans();
       }
     },
     countAllExePlans() {
-      countAllExePlans().then(res => {
+      const query = this.buildPlanQueryParams();
+      countAllExePlans("all", query).then(res => {
         this.pageHelper.totalSize = res;
       });
     },
@@ -1293,6 +1371,10 @@ export default {
     onSearchQuery() {
       this.pageHelper.currentPageNum = 1;
       this.searchByCondition();
+    },
+    openPlanGuide() {
+      this.manualPageKey = "plan";
+      this.manualDialogVisible = true;
     },
     reExecutePlan(scope) {
       return planExecutionMethods.reExecutePlan.call(this, scope);

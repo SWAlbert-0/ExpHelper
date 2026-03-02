@@ -1,0 +1,6 @@
+﻿{
+  "runtimeType": "python",
+  "serviceName": "py-moead-lsmop-ls",
+  "port": 18087,
+  "entry": "main:app"
+}

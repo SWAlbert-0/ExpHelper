@@ -51,6 +51,16 @@ export function getUserByRegexName(userName, pageNum, pageSize) {
   });
 }
 
+export function getUserByName(userName) {
+  return request({
+    url: "/api/PlatController/getUserByName",
+    method: "get",
+    params: {
+      userName: userName
+    }
+  });
+}
+
 export function updateUserById(userInfo) {
   return request({
     url: "/api/PlatController/updateUserById",
@@ -76,12 +86,13 @@ export function countUserByUserName(userName) {
   });
 }
 
-export function resetUserPassword(userId, password) {
+export function resetUserPassword(userId, password, userName) {
   return request({
     url: "/api/PlatController/resetUserPassword",
     method: "post",
     data: {
       userId: userId,
+      userName: userName,
       password: password
     }
   });

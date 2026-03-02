@@ -16,6 +16,10 @@ public interface NotificationService {
 
     int enqueuePlanDoneNotifications(ExePlan exePlan, boolean success, Map<String, ExeResultDetail> resultDetailsByAlgId);
 
+    int enqueuePlanProgressNotifications(ExePlan exePlan, String progressMessage);
+
+    int enqueuePlanExceptionNotifications(ExePlan exePlan, String errorMessage);
+
     List<NotificationOutbox> listOutbox(String planId, String executionId, String userId, String status,
                                         long fromTs, long toTs, int pageNum, int pageSize);
 

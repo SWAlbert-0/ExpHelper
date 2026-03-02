@@ -1,0 +1,6 @@
+﻿{
+  "runtimeType": "python",
+  "serviceName": "py-nsga2-zdt1-ls",
+  "port": 18086,
+  "entry": "main:app"
+}

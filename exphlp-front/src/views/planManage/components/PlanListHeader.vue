@@ -2,11 +2,16 @@
   <div class="plan-list-header-body">
     <el-alert
       class="plan-list-alert"
-      title="推荐使用“执行向导”：问题实例 -> 算法 -> 环境检查 -> 一键执行。服务名必须与 Nacos 注册名一致。"
+      title="推荐优先走“执行向导”：选择问题实例 -> 选择算法 -> 执行检查 -> 提交执行。"
       type="info"
       :closable="false"
       show-icon
     />
+    <div class="plan-guide-strip">
+      <div class="guide-item"><span class="guide-no">1</span><span>创建计划并选择问题实例</span></div>
+      <div class="guide-item"><span class="guide-no">2</span><span>添加算法并核对参数</span></div>
+      <div class="guide-item"><span class="guide-no">3</span><span>执行检查通过后再执行</span></div>
+    </div>
     <el-form :model="localSearch" :inline="true" class="demo-form-inline plan-search-form" align="center">
       <el-row type="flex" class="plan-search-row">
         <el-col :span="6" class="plan-search-col">
@@ -66,6 +71,8 @@
           <el-button type="success" icon="el-icon-plus" @click="$emit('add')">添加</el-button>
           <el-button type="primary" icon="el-icon-magic-stick" @click="$emit('open-wizard')">执行向导</el-button>
           <el-button type="warning" icon="el-icon-data-analysis" @click="$emit('open-readiness')">执行前体检</el-button>
+          <el-button type="default" icon="el-icon-document" @click="$emit('open-guide')">查看操作手册</el-button>
+          <span class="toolbar-split"></span>
           <el-button type="danger" icon="el-icon-delete" @click="$emit('delete-batch')">批量删除</el-button>
         </div>
       </el-col>
@@ -137,6 +144,39 @@ export default {
   margin-bottom: 12px;
 }
 
+.plan-guide-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.guide-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e8eef7;
+  border-radius: 6px;
+  background: #f9fbff;
+  color: #4f5d75;
+  font-size: 12px;
+}
+
+.guide-no {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #409eff;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 .plan-search-form {
   padding: 8px 10px;
   border: 1px solid #f2f6fc;
@@ -184,7 +224,17 @@ export default {
   gap: 8px;
 }
 
+.toolbar-split {
+  width: 1px;
+  height: 24px;
+  background: #e4e7ed;
+}
+
 @media (max-width: 1400px) {
+  .plan-guide-strip {
+    grid-template-columns: 1fr;
+  }
+
   .plan-search-row {
     flex-wrap: wrap;
   }

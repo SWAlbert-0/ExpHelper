@@ -12,6 +12,8 @@ import java.io.Serializable;
 public class ProbInst  implements Serializable {
     @MongoId
     private String instId;//MongoDB自动生成的ID
+    private String ownerUserId;//创建者用户ID
+    private String ownerUserName;//创建者用户名
     private String categoryName;
     private String instName;
     private String machineIp;//保存程序的机器的IP地址
@@ -19,4 +21,3 @@ public class ProbInst  implements Serializable {
     private String machineName;//保存程序的机器名
     private String description;//程序描述
  }
-

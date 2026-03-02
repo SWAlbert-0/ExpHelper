@@ -1,5 +1,6 @@
 package fjnu.edu.controller;
 
+import fjnu.edu.auth.AuthUser;
 import fjnu.edu.auth.PasswordService;
 import fjnu.edu.platmgr.entity.UserInfo;
 import fjnu.edu.platmgr.service.PlatMgrService;
@@ -35,7 +36,7 @@ class PlatMgrCtrlTest {
         user.setPassword("123456");
         user.setEmail("bad-email");
 
-        Map<String, Object> response = controller.addUser(user, new MockHttpServletRequest());
+        Map<String, Object> response = controller.addUser(user, adminRequest());
 
         assertEquals(400, response.get("code"));
         assertEquals("USER_FIELD_INVALID", response.get("errorCode"));
@@ -51,11 +52,48 @@ class PlatMgrCtrlTest {
         current.setUserId("u-1");
         when(platMgrService.getUserById("u-1")).thenReturn(current);
 
-        Map<String, Object> response = controller.resetUserPassword(payload, new MockHttpServletRequest());
+        Map<String, Object> response = controller.resetUserPassword(payload, adminRequest());
 
         assertEquals(400, response.get("code"));
         assertEquals("PASSWORD_LENGTH_INVALID", response.get("errorCode"));
         verify(platMgrService, never()).updateUserById(any(UserInfo.class));
     }
-}
 
+    @Test
+    void addUserClearsBlankUserIdBeforeInsert() {
+        UserInfo user = new UserInfo();
+        user.setUserId("   ");
+        user.setUserName("new-user");
+        user.setPassword("123456");
+
+        when(passwordService.encode("123456")).thenReturn("encoded");
+
+        Map<String, Object> response = controller.addUser(user, adminRequest());
+
+        assertEquals(200, response.get("code"));
+        verify(platMgrService).addUser(argThat(saved ->
+                saved != null
+                        && saved.getUserId() == null
+                        && "encoded".equals(saved.getPassword())
+                        && "new-user".equals(saved.getUserName())
+        ));
+    }
+
+    @Test
+    void getUsersAllowsNonAdminReadOnlyAccess() {
+        controller.getUsers(nonAdminRequest());
+        verify(platMgrService, times(1)).getUsers();
+    }
+
+    private MockHttpServletRequest adminRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("authUser", new AuthUser("u-admin", "admin", 1));
+        return request;
+    }
+
+    private MockHttpServletRequest nonAdminRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("authUser", new AuthUser("u-user", "user", 0));
+        return request;
+    }
+}

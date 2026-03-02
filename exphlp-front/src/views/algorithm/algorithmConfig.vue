@@ -1,33 +1,49 @@
 <template>
   <div class="app-container">
     <el-alert
-      title="执行建议：算法服务名必须与 Nacos 注册名一致。完成后可到“执行计划管理”使用执行向导自动检查并执行。"
+      title="算法接入建议：先导入算法元数据，再上传源码构建，最后进入执行计划做执行前检查。"
       type="info"
       :closable="false"
       show-icon
-      style="margin-bottom: 12px;"
+      class="algo-page-alert"
     />
-    <!--添加 批量删除 查询-->
-    <el-row>
-      <el-col :span="2">
+    <div class="algo-guide-grid">
+      <div class="guide-card">
+        <div class="guide-index">1</div>
+        <div class="guide-main">
+          <div class="guide-title">录入算法</div>
+          <div class="guide-desc">添加/JSON导入算法，确保 serviceName 与 Nacos 注册名一致。</div>
+        </div>
+      </div>
+      <div class="guide-card">
+        <div class="guide-index">2</div>
+        <div class="guide-main">
+          <div class="guide-title">上传源码</div>
+          <div class="guide-desc">上传 zip（根目录含 exphlp-alg.json），运行时需与算法库一致。</div>
+        </div>
+      </div>
+      <div class="guide-card">
+        <div class="guide-index">3</div>
+        <div class="guide-main">
+          <div class="guide-title">构建并联调</div>
+          <div class="guide-desc">构建成功后到执行计划管理做执行检查，通过后再执行计划。</div>
+        </div>
+      </div>
+    </div>
+    <div class="toolbar-row">
+      <div class="toolbar-left">
         <el-button type="success" icon="el-icon-plus" @click="openAlgInfoAddForm()">添加</el-button>
-      </el-col>
-      <el-col :span="2">
         <el-button type="primary" icon="el-icon-upload2" @click="openImportDialog()">JSON导入</el-button>
-      </el-col>
-      <el-col :span="2">
+        <el-button type="default" icon="el-icon-document" @click="openManualDialog">查看操作手册</el-button>
+        <span class="toolbar-split"></span>
         <el-button type="danger" icon="el-icon-delete" :loading="batchDeleteLoading" @click="deleteBatch()">批量删除</el-button>
-      </el-col>
-      <el-col :span="18">
-        <el-form :inline="true" class="demo-form-inline" align="center">
-          <el-form-item>
-            <el-input v-model="algName" placeholder="请输入算法名称" clearable/>
-          </el-form-item>
-          <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getByAlgName()">查询</el-button>
-          <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
-        </el-form>
-      </el-col>
-    </el-row>
+      </div>
+      <div class="toolbar-right">
+        <el-input v-model="algName" placeholder="请输入算法名称" clearable class="toolbar-search-input"/>
+        <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getByAlgName()">查询</el-button>
+        <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
+      </div>
+    </div>
 
     <!--算法信息表格-->
     <el-table
@@ -56,13 +72,13 @@
       <el-table-column label="操作" align="center" width="340">
         <template slot-scope="scope">
           <el-button type="warning" size="mini" icon="el-icon-upload2" @click="openSourceUploadDialog(scope.row)">源码</el-button>
-          <el-button type="primary" size="mini" icon="el-icon-edit" @click="openAlgInfoUpdateForm(scope.row)">编辑</el-button>
+          <el-button type="primary" size="mini" icon="el-icon-edit" :disabled="!canManageAlg(scope.row)" @click="openAlgInfoUpdateForm(scope.row)">编辑</el-button>
           <el-button
             type="danger"
             size="mini"
             icon="el-icon-delete"
             :loading="!!deletingAlgIds[scope.row.algId]"
-            :disabled="!!deletingAlgIds[scope.row.algId]"
+            :disabled="!!deletingAlgIds[scope.row.algId] || !canManageAlg(scope.row)"
             @click="deleteAlgInfo(scope.row.algId)"
           >删除</el-button>
         </template>
@@ -388,6 +404,38 @@
         show-icon
         style="margin-bottom: 12px;"
       />
+      <el-descriptions :column="2" border size="small" style="margin-bottom: 12px;">
+        <el-descriptions-item label="运行容器">{{ sourceUploadForm.runtimeInfo.containerName || "--" }}</el-descriptions-item>
+        <el-descriptions-item label="容器状态">
+          <el-tag size="mini" :type="sourceUploadForm.runtimeInfo.containerRunning ? 'success' : 'info'">
+            {{ sourceUploadForm.runtimeInfo.containerStatus || (sourceUploadForm.runtimeInfo.containerExists ? "存在(未运行)" : "未创建") }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="镜像">{{ sourceUploadForm.runtimeInfo.containerImage || sourceUploadForm.runtimeInfo.imageName || "--" }}</el-descriptions-item>
+        <el-descriptions-item label="Nacos健康实例">{{ sourceUploadForm.runtimeInfo.nacosHealthyCount || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="最近构建状态">{{ sourceUploadForm.runtimeInfo.taskStatus || "--" }}</el-descriptions-item>
+        <el-descriptions-item label="端口映射">{{ sourceUploadForm.runtimeInfo.containerPorts || "--" }}</el-descriptions-item>
+        <el-descriptions-item label="最近上传时间">{{ formatTimestamp(sourceUploadForm.runtimeInfo.createdAt) }}</el-descriptions-item>
+        <el-descriptions-item label="最近启动时间">{{ formatTimestamp(sourceUploadForm.runtimeInfo.startedAt) }}</el-descriptions-item>
+        <el-descriptions-item label="最近结束时间">{{ formatTimestamp(sourceUploadForm.runtimeInfo.finishedAt) }}</el-descriptions-item>
+        <el-descriptions-item label="迁移信息">{{ sourceUploadForm.runtimeInfo.migrationText || "--" }}</el-descriptions-item>
+      </el-descriptions>
+      <el-alert
+        v-if="sourceUploadForm.runtimeInfo.message"
+        :title="sourceUploadForm.runtimeInfo.message"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 10px;"
+      />
+      <el-alert
+        v-if="!sourceUploadForm.runtimeInfo.canOperate"
+        title="当前账号仅可查看运行信息，无上传/运维权限。"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 10px;"
+      />
       <el-upload
         class="upload-demo"
         drag
@@ -403,16 +451,37 @@
         <div slot="tip" class="el-upload__tip">必须包含 exphlp-alg.json</div>
       </el-upload>
       <div style="margin-top: 12px;">
-        <el-button type="primary" :loading="sourceUploadLoading" @click="submitSourceUpload">上传源码</el-button>
-        <el-button type="success" :loading="buildStartLoading" :disabled="!sourceUploadForm.taskId" @click="startBuildTask">构建并启动</el-button>
-        <el-button type="default" :disabled="!sourceUploadForm.taskId" @click="refreshBuildStatus">刷新状态</el-button>
+        <el-button type="primary" :loading="sourceUploadLoading" :disabled="!sourceUploadForm.runtimeInfo.canOperate" @click="submitSourceUpload">上传源码</el-button>
+        <el-button type="success" :loading="buildStartLoading" :disabled="!sourceUploadForm.taskId || !sourceUploadForm.runtimeInfo.canOperate" @click="startBuildTask">构建并启动</el-button>
+        <el-button type="warning" :loading="runtimeOperateLoading.OFFLINE" :disabled="!sourceUploadForm.runtimeInfo.canOffline" @click="operateRuntime('OFFLINE')">下线</el-button>
+        <el-button type="success" :loading="runtimeOperateLoading.ONLINE" :disabled="!sourceUploadForm.runtimeInfo.canOnline" @click="operateRuntime('ONLINE')">上线</el-button>
+        <el-button type="primary" :loading="runtimeOperateLoading.RESTART" :disabled="!sourceUploadForm.runtimeInfo.canRestart" @click="operateRuntime('RESTART')">重启</el-button>
+        <el-button type="danger" :loading="runtimeOperateLoading.PRUNE_IMAGES" :disabled="!sourceUploadForm.runtimeInfo.canPruneImages" @click="operateRuntime('PRUNE_IMAGES')">清理旧资源</el-button>
+        <el-button type="default" :loading="runtimeInfoLoading" @click="refreshSourcePanel(false)">刷新</el-button>
       </div>
       <el-descriptions v-if="sourceUploadForm.taskId" :column="2" border style="margin-top: 14px;">
         <el-descriptions-item label="任务ID">{{ sourceUploadForm.taskId }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ sourceUploadForm.status || "--" }}</el-descriptions-item>
+        <el-descriptions-item label="阶段">{{ sourceUploadForm.phase || "--" }}</el-descriptions-item>
         <el-descriptions-item label="错误码">{{ sourceUploadForm.errorCode || "--" }}</el-descriptions-item>
         <el-descriptions-item label="错误信息">{{ sourceUploadForm.errorMessage || "--" }}</el-descriptions-item>
       </el-descriptions>
+      <el-alert
+        v-if="sourceUploadForm.fixHints && sourceUploadForm.fixHints.length > 0"
+        :title="`修复建议：${sourceUploadForm.fixHints[0]}`"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-top: 10px;"
+      />
+      <el-input
+        v-if="sourceUploadForm.contractCheckText"
+        type="textarea"
+        :rows="4"
+        v-model="sourceUploadForm.contractCheckText"
+        readonly
+        style="margin-top: 10px;"
+      />
       <el-input
         v-if="sourceUploadForm.taskId"
         type="textarea"
@@ -422,6 +491,10 @@
         style="margin-top: 12px;"
       />
     </el-dialog>
+    <manual-doc-dialog
+      :visible.sync="manualDialogVisible"
+      :page-key="manualPageKey"
+    />
   </div>
 </template>
 
@@ -441,12 +514,25 @@ import {
   importAlgsJson,
   uploadAlgSource,
   triggerAlgBuild,
-  getAlgBuildStatus,
   getAlgBuildLogs,
+  getAlgSourceRuntimeInfo,
+  operateAlgSourceRuntime,
 } from "@/api/exphlp/algLibMgr";
 import { normalizeAlgorithmImportJson } from "@/utils/jsonImportNormalizer";
+import ManualDocDialog from "@/components/ManualDocDialog";
+import { mapGetters } from "vuex";
 
 export default {
+  components: { ManualDocDialog },
+  computed: {
+    ...mapGetters([
+      "roles",
+      "name"
+    ]),
+    isAdmin() {
+      return Array.isArray(this.roles) && this.roles.includes("ROLE_ADMIN");
+    }
+  },
 
   data() {
     return {
@@ -471,6 +557,14 @@ export default {
       },
       sourceUploadLoading: false,
       buildStartLoading: false,
+      runtimeInfoLoading: false,
+      sourceRuntimeTimer: null,
+      runtimeOperateLoading: {
+        OFFLINE: false,
+        ONLINE: false,
+        RESTART: false,
+        PRUNE_IMAGES: false,
+      },
       sourceUploadForm: {
         algId: "",
         algName: "",
@@ -479,9 +573,34 @@ export default {
         fileList: [],
         taskId: "",
         status: "",
+        phase: "",
         errorCode: "",
         errorMessage: "",
+        fixHints: [],
+        contractCheckText: "",
         logs: "",
+        runtimeInfo: {
+          hasBuildTask: false,
+          containerExists: false,
+          containerRunning: false,
+          containerName: "",
+          containerStatus: "",
+          containerImage: "",
+          containerPorts: "",
+          imageName: "",
+          taskStatus: "",
+          nacosHealthyCount: 0,
+          createdAt: 0,
+          startedAt: 0,
+          finishedAt: 0,
+          canOffline: false,
+          canOnline: false,
+          canRestart: false,
+          canPruneImages: false,
+          canOperate: false,
+          migrationText: "",
+          message: "",
+        },
       },
       algName: '',
       multipleSelection: [],
@@ -544,6 +663,8 @@ export default {
         { value: "java", label: "Java" },
         { value: "python", label: "Python" },
       ],
+      manualDialogVisible: false,
+      manualPageKey: "algorithm",
       algInfoFormRules: {
         algName: [
           { required: true, message: '请输入算法名称', trigger: 'blur' },
@@ -582,7 +703,36 @@ export default {
       this.openAlgInfoAddForm();
     }
   },
+  watch: {
+    dialogSourceUploadVisible(val) {
+      if (val) {
+        this.startSourceRuntimeAutoRefresh();
+      } else {
+        this.stopSourceRuntimeAutoRefresh();
+      }
+    },
+  },
+  beforeDestroy() {
+    this.stopSourceRuntimeAutoRefresh();
+  },
   methods: {
+    canManageAlg(row) {
+      if (this.isAdmin) {
+        return true;
+      }
+      if (!row) {
+        return false;
+      }
+      const ownerUserName = (row.ownerUserName || "").toString().trim();
+      if (ownerUserName) {
+        return ownerUserName === (this.name || "").toString().trim();
+      }
+      return false;
+    },
+    openManualDialog() {
+      this.manualPageKey = "algorithm";
+      this.manualDialogVisible = true;
+    },
     getAlgInfos(){
       getAlgs(this.pageHelper.currentPageNum,this.pageHelper.pageSize).then(res => {
         this.algInfo = this.normalizeAlgRows(res);
@@ -626,11 +776,37 @@ export default {
         fileList: [],
         taskId: "",
         status: "",
+        phase: "",
         errorCode: "",
         errorMessage: "",
+        fixHints: [],
+        contractCheckText: "",
         logs: "",
+        runtimeInfo: {
+          hasBuildTask: false,
+          containerExists: false,
+          containerRunning: false,
+          containerName: row.containerName || "",
+          containerStatus: "",
+          containerImage: "",
+          containerPorts: "",
+          imageName: "",
+          taskStatus: "",
+          nacosHealthyCount: 0,
+          createdAt: 0,
+          startedAt: 0,
+          finishedAt: 0,
+          canOffline: false,
+          canOnline: false,
+          canRestart: false,
+          canPruneImages: false,
+          migrationText: "",
+          canOperate: false,
+          message: "",
+        },
       };
       this.dialogSourceUploadVisible = true;
+      this.refreshSourcePanel(true);
     },
     onSourceFileChange(file, fileList) {
       this.sourceUploadForm.file = file && file.raw ? file.raw : null;
@@ -652,13 +828,16 @@ export default {
       this.sourceUploadLoading = true;
       uploadAlgSource(this.sourceUploadForm.algId, this.sourceUploadForm.file).then((res) => {
         const task = res && res.data ? res.data : {};
-        this.sourceUploadForm.taskId = task.taskId || "";
-        this.sourceUploadForm.status = task.status || "";
-        this.sourceUploadForm.errorCode = task.errorCode || "";
-        this.sourceUploadForm.errorMessage = task.errorMessage || "";
+        this.applyBuildTask(task);
         this.$message({ type: "success", message: "源码上传成功，可开始构建" });
       }).catch((error) => {
+        const data = error && error.response && error.response.data ? error.response.data.data : null;
+        const fixHints = data && Array.isArray(data.fixHints) ? data.fixHints : [];
         const message = this.extractErrorMessage(error, "源码上传失败");
+        if (fixHints.length > 0) {
+          this.sourceUploadForm.fixHints = fixHints;
+          this.sourceUploadForm.contractCheckText = `校验阶段: ${data.phase || "VALIDATE"}\n` + fixHints.map((item, index) => `${index + 1}. ${item}`).join("\n");
+        }
         this.$message({ type: "error", message });
       }).finally(() => {
         this.sourceUploadLoading = false;
@@ -672,9 +851,9 @@ export default {
       this.buildStartLoading = true;
       triggerAlgBuild(this.sourceUploadForm.taskId).then((res) => {
         const task = res && res.data ? res.data : {};
-        this.sourceUploadForm.status = task.status || "RUNNING";
+        this.applyBuildTask(task);
         this.$message({ type: "success", message: "构建任务已启动" });
-        this.refreshBuildStatus();
+        this.refreshSourcePanel(false);
       }).catch((error) => {
         const message = this.extractErrorMessage(error, "构建启动失败");
         this.$message({ type: "error", message });
@@ -682,19 +861,139 @@ export default {
         this.buildStartLoading = false;
       });
     },
-    refreshBuildStatus() {
-      if (!this.sourceUploadForm.taskId) {
+    refreshSourcePanel(silent) {
+      this.fetchSourceRuntimeInfo(this.sourceUploadForm.algId, { silent: !!silent });
+    },
+    fetchSourceRuntimeInfo(algId, options = {}) {
+      if (!algId) {
         return;
       }
-      getAlgBuildStatus(this.sourceUploadForm.taskId).then((res) => {
-        const task = res && res.data ? res.data : {};
-        this.sourceUploadForm.status = task.status || "";
-        this.sourceUploadForm.errorCode = task.errorCode || "";
-        this.sourceUploadForm.errorMessage = task.errorMessage || "";
+      const silent = !!options.silent;
+      this.runtimeInfoLoading = true;
+      getAlgSourceRuntimeInfo(algId).then((res) => {
+        const info = res && res.data ? res.data : {};
+        this.sourceUploadForm.runtimeInfo = {
+          hasBuildTask: !!info.hasBuildTask,
+          containerExists: !!info.containerExists,
+          containerRunning: !!info.containerRunning,
+          containerName: info.containerName || "",
+          containerStatus: info.containerStatus || "",
+          containerImage: info.containerImage || "",
+          containerPorts: info.containerPorts || "",
+          imageName: info.imageName || "",
+          taskStatus: info.taskStatus || "",
+          nacosHealthyCount: Number(info.nacosHealthyCount || 0),
+          createdAt: Number(info.createdAt || 0),
+          startedAt: Number(info.startedAt || 0),
+          finishedAt: Number(info.finishedAt || 0),
+          canOffline: !!info.canOffline,
+          canOnline: !!info.canOnline,
+          canRestart: !!info.canRestart,
+          canPruneImages: !!info.canPruneImages,
+          canOperate: !!info.canOperate,
+          migrationText: this.resolveMigrationText(info.migrationInfo),
+          message: info.message || "",
+        };
+        if (info.taskId) {
+          this.sourceUploadForm.taskId = info.taskId;
+          this.sourceUploadForm.status = info.taskStatus || "";
+          this.sourceUploadForm.phase = info.taskPhase || "";
+          this.sourceUploadForm.errorCode = info.taskErrorCode || "";
+          this.sourceUploadForm.errorMessage = info.taskErrorMessage || "";
+          this.loadBuildLogs(info.taskId);
+        } else {
+          this.sourceUploadForm.taskId = "";
+          this.sourceUploadForm.status = "";
+          this.sourceUploadForm.phase = "";
+          this.sourceUploadForm.errorCode = "";
+          this.sourceUploadForm.errorMessage = "";
+          this.sourceUploadForm.logs = "";
+        }
+      }).catch((error) => {
+        if (!silent) {
+          const message = this.extractErrorMessage(error, "读取运行信息失败");
+          this.$message({ type: "warning", message });
+        }
+      }).finally(() => {
+        this.runtimeInfoLoading = false;
       });
-      getAlgBuildLogs(this.sourceUploadForm.taskId, 300).then((res) => {
+    },
+    loadBuildLogs(taskId) {
+      if (!taskId) {
+        this.sourceUploadForm.logs = "";
+        return;
+      }
+      getAlgBuildLogs(taskId, 300).then((res) => {
         this.sourceUploadForm.logs = res && res.data ? (res.data.logs || "") : "";
       });
+    },
+    startSourceRuntimeAutoRefresh() {
+      this.stopSourceRuntimeAutoRefresh();
+      this.sourceRuntimeTimer = setInterval(() => {
+        if (!this.dialogSourceUploadVisible) {
+          return;
+        }
+        this.refreshSourcePanel(true);
+      }, 10000);
+    },
+    stopSourceRuntimeAutoRefresh() {
+      if (this.sourceRuntimeTimer) {
+        clearInterval(this.sourceRuntimeTimer);
+        this.sourceRuntimeTimer = null;
+      }
+    },
+    operateRuntime(action) {
+      if (!this.sourceUploadForm.algId || !action) {
+        return;
+      }
+      this.$set(this.runtimeOperateLoading, action, true);
+      operateAlgSourceRuntime(this.sourceUploadForm.algId, action).then((res) => {
+        const op = res && res.data ? res.data.operation : null;
+        const detail = this.formatRuntimeOperateMessage(action, op);
+        this.$message({ type: "success", message: detail || ((op && op.message) || "操作成功") });
+        this.refreshSourcePanel(true);
+      }).catch((error) => {
+        const message = this.extractErrorMessage(error, "操作失败");
+        this.$message({ type: "error", message });
+      }).finally(() => {
+        this.$set(this.runtimeOperateLoading, action, false);
+      });
+    },
+    formatRuntimeOperateMessage(action, op) {
+      if (!op || typeof op !== "object") {
+        return "";
+      }
+      if (action !== "PRUNE_IMAGES") {
+        return op.message || "";
+      }
+      const removedContainers = Number(op.removedContainers || 0);
+      const removedImages = Number(op.removedImages || 0);
+      const skipped = Array.isArray(op.skippedRunningContainers) ? op.skippedRunningContainers.length : 0;
+      return `旧资源清理完成：容器${removedContainers}个，镜像${removedImages}个，跳过运行中${skipped}个`;
+    },
+    resolveMigrationText(migrationInfo) {
+      if (!migrationInfo || typeof migrationInfo !== "object" || Object.keys(migrationInfo).length === 0) {
+        return "";
+      }
+      if (migrationInfo.migrated) {
+        return `已迁移: ${migrationInfo.from || "-"} -> ${migrationInfo.to || "-"}`;
+      }
+      if (migrationInfo.error) {
+        return `迁移失败: ${migrationInfo.error}`;
+      }
+      return "";
+    },
+    formatTimestamp(ts) {
+      const value = Number(ts || 0);
+      if (!value || value <= 0) {
+        return "--";
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "--";
+      }
+      const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     },
     triggerImportFileSelect() {
       if (!this.$refs.importFileInput) {
@@ -886,6 +1185,10 @@ export default {
     },
     //
     openAlgInfoUpdateForm(row){
+      if (!this.canManageAlg(row)) {
+        this.$message({ type: "warning", message: "仅可编辑自己创建的算法" });
+        return;
+      }
       this.algInfoUpdateForm = Object.assign({}, row, {
         runtimeType: this.normalizeRuntimeType(row && row.runtimeType),
       });
@@ -909,6 +1212,11 @@ export default {
     },
     //
     deleteAlgInfo(algId){
+      const row = (this.algInfo || []).find((item) => item.algId === algId);
+      if (row && !this.canManageAlg(row)) {
+        this.$message({ type: "warning", message: "仅可删除自己创建的算法" });
+        return;
+      }
       this.$confirm("此操作将永久删除算法信息记录, 是否继续?", "提示", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
@@ -954,7 +1262,13 @@ export default {
         })
           .then(() => {
             this.batchDeleteLoading = true;
-            const deleteTasks = this.multipleSelection.map((item) => deleteAlgById(item.algId));
+            const selected = this.multipleSelection.filter((item) => this.canManageAlg(item));
+            if (selected.length === 0) {
+              this.batchDeleteLoading = false;
+              this.$message({ type: "warning", message: "仅可批量删除自己创建的算法" });
+              return;
+            }
+            const deleteTasks = selected.map((item) => deleteAlgById(item.algId));
             Promise.allSettled(deleteTasks).then((results) => {
               let deletedCount = 0;
               let noopCount = 0;
@@ -964,7 +1278,7 @@ export default {
               const failedAlgIds = [];
               for (let i = 0; i < results.length; i++) {
                 const current = results[i];
-                const currentAlgId = this.multipleSelection[i] && this.multipleSelection[i].algId ? this.multipleSelection[i].algId : "";
+                const currentAlgId = selected[i] && selected[i].algId ? selected[i].algId : "";
                 if (current.status === "fulfilled") {
                   const state = this.extractDeleteState(current.value, currentAlgId);
                   if (state.deletedCount > 0) {
@@ -1193,12 +1507,117 @@ export default {
         runtimeType: this.normalizeRuntimeType(row && row.runtimeType),
       }));
     },
+    applyBuildTask(task) {
+      const nextTask = task || {};
+      this.sourceUploadForm.taskId = nextTask.taskId || this.sourceUploadForm.taskId || "";
+      this.sourceUploadForm.status = nextTask.status || "";
+      this.sourceUploadForm.phase = nextTask.phase || "";
+      this.sourceUploadForm.errorCode = nextTask.errorCode || "";
+      this.sourceUploadForm.errorMessage = nextTask.errorMessage || "";
+      this.sourceUploadForm.fixHints = Array.isArray(nextTask.fixHints) ? nextTask.fixHints : [];
+      const contractCheck = nextTask.contractCheck || null;
+      if (contractCheck && typeof contractCheck === "object") {
+        const fields = [];
+        if (contractCheck.metaEntryName) {
+          fields.push(`meta文件: ${contractCheck.metaEntryName}`);
+        }
+        if (contractCheck.runtimeType || contractCheck.metaRuntimeType) {
+          fields.push(`runtime: 算法库=${contractCheck.runtimeType || "-"} / 源码包=${contractCheck.metaRuntimeType || "-"}`);
+        }
+        if (contractCheck.algServiceName || contractCheck.metaServiceName) {
+          fields.push(`serviceName: 算法库=${contractCheck.algServiceName || "-"} / 源码包=${contractCheck.metaServiceName || "-"}`);
+        }
+        if (contractCheck.metaPort) {
+          fields.push(`port: ${contractCheck.metaPort}`);
+        }
+        if (contractCheck.metaEntry) {
+          fields.push(`entry: ${contractCheck.metaEntry}`);
+        }
+        const errors = Array.isArray(contractCheck.errors) ? contractCheck.errors : [];
+        if (errors.length > 0) {
+          fields.push(`错误: ${errors.join("；")}`);
+        }
+        this.sourceUploadForm.contractCheckText = fields.join("\n");
+      } else {
+        this.sourceUploadForm.contractCheckText = "";
+      }
+    },
 
   }
 };
 </script>
 
 <style lang="less" scoped>
+.algo-page-alert {
+  margin-bottom: 12px;
+}
+.algo-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.guide-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e8eef7;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f5f9ff 100%);
+}
+.guide-index {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #409eff;
+  color: #fff;
+  font-size: 13px;
+  line-height: 24px;
+  text-align: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.guide-main {
+  min-width: 0;
+}
+.guide-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2f3b52;
+  margin-bottom: 4px;
+}
+.guide-desc {
+  font-size: 12px;
+  color: #5f6b7f;
+  line-height: 1.45;
+}
+.toolbar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.toolbar-right {
+  margin-left: auto;
+}
+.toolbar-split {
+  width: 1px;
+  height: 24px;
+  background: #e4e7ed;
+}
+.toolbar-search-input {
+  width: 240px;
+}
 .import-dropzone {
   display: flex;
   align-items: center;
@@ -1218,5 +1637,17 @@ export default {
 }
 .import-file-input {
   display: none;
+}
+@media (max-width: 1200px) {
+  .algo-guide-grid {
+    grid-template-columns: 1fr;
+  }
+  .toolbar-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .toolbar-right {
+    margin-left: 0;
+  }
 }
 </style>

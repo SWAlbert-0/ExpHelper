@@ -11,6 +11,9 @@ public interface AlgBuildTaskService {
 
     AlgBuildTask getTask(String taskId);
 
+    AlgBuildTask getLatestTaskByAlgId(String algId);
+
+    void updateContainerName(String taskId, String containerName);
+
     String tailLog(String taskId, int tail);
 }
-

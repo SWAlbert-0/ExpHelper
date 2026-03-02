@@ -3,6 +3,9 @@ package fjnu.edu.algruntime.entity;
 import lombok.Data;
 import org.springframework.data.mongodb.core.mapping.MongoId;
 
+import java.util.List;
+import java.util.Map;
+
 @Data
 public class AlgBuildTask {
     @MongoId
@@ -16,6 +19,9 @@ public class AlgBuildTask {
     private String status;
     private String errorCode;
     private String errorMessage;
+    private String phase;
+    private List<String> fixHints;
+    private Map<String, Object> contractCheck;
     private String logPath;
     private String imageName;
     private String containerName;
@@ -24,4 +30,3 @@ public class AlgBuildTask {
     private long finishedAt;
     private String traceId;
 }
-

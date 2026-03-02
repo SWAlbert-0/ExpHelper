@@ -1,13 +1,15 @@
 import request from "@/utils/request";
 
-export function getExePlans(pageNum, pageSize){
+export function getExePlans(pageNum, pageSize, scope, query){
+  const params = Object.assign({
+    pageNum: pageNum,
+    pageSize: pageSize,
+    scope: scope
+  }, query || {});
   return request({
     url: "/api/ExePlanController/getExePlans",
     method: "get",
-    params: {
-      pageNum: pageNum,
-      pageSize: pageSize
-    }
+    params
   });
 }
 
@@ -47,10 +49,14 @@ export function updateExePlanById(exePlan) {
   });
 }
 
-export function countAllExePlans() {
+export function countAllExePlans(scope, query){
+  const params = Object.assign({
+    scope: scope
+  }, query || {});
   return request({
     url: "/api/ExePlanController/countAllExePlans",
-    method: "get"
+    method: "get",
+    params
   });
 }
 

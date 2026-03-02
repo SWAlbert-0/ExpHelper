@@ -1,0 +1,5 @@
+{
+  "runtimeType": "java",
+  "serviceName": "moead-lsmop-ls",
+  "port": 18083
+}

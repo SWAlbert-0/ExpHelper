@@ -5,7 +5,10 @@ public final class NotificationConstants {
     }
 
     public static final String CHANNEL_MAIL = "MAIL";
+    public static final String CHANNEL_WECHAT = "WECHAT";
     public static final String EVENT_PLAN_DONE = "PLAN_DONE";
+    public static final String EVENT_PLAN_PROGRESS = "PLAN_PROGRESS";
+    public static final String EVENT_PLAN_EXCEPTION = "PLAN_EXCEPTION";
 
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_SENDING = "SENDING";

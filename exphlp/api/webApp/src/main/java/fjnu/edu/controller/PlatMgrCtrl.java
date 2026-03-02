@@ -1,6 +1,7 @@
 package fjnu.edu.controller;
 
 import fjnu.edu.auth.ApiResponse;
+import fjnu.edu.auth.AuthUser;
 import fjnu.edu.auth.ErrorCode;
 import fjnu.edu.auth.PasswordService;
 import fjnu.edu.auth.TraceContext;
@@ -9,6 +10,7 @@ import fjnu.edu.platmgr.entity.UserInfo;
 import fjnu.edu.platmgr.service.PlatMgrService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.bson.types.ObjectId;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,8 @@ import javax.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
+import java.util.Collections;
 
 @RestController
 @CrossOrigin
@@ -34,8 +38,9 @@ public class PlatMgrCtrl {
      * @return
      */
     @GetMapping("/getUsers")
-    public List<UserInfo> getUsers() {
-        return sanitizeUsers(platMgrService.getUsers());
+    public Object getUsers(HttpServletRequest request) {
+        List<UserInfo> users = sortUsersForPlatform(platMgrService.getUsers());
+        return sanitizeUsers(users);
     }
 
     /**
@@ -45,9 +50,18 @@ public class PlatMgrCtrl {
      * @return
      */
     @GetMapping("getUsersByPage")
-    public List<UserInfo> getUsersByPage(@RequestParam(value = "pageNum") int pageNum,
-                                         @RequestParam(value = "pageSize") int pageSize) {
-        return sanitizeUsers(platMgrService.getUsersByPage(pageNum, pageSize));
+    public Object getUsersByPage(@RequestParam(value = "pageNum") int pageNum,
+                                         @RequestParam(value = "pageSize") int pageSize,
+                                         HttpServletRequest request) {
+        int safePageNum = Math.max(1, pageNum);
+        int safePageSize = pageSize <= 0 ? 10 : pageSize;
+        List<UserInfo> all = sortUsersForPlatform(platMgrService.getUsers());
+        if (all.isEmpty()) {
+            return Collections.emptyList();
+        }
+        int from = Math.min((safePageNum - 1) * safePageSize, all.size());
+        int to = Math.min(from + safePageSize, all.size());
+        return sanitizeUsers(all.subList(from, to));
 
     }
 
@@ -57,7 +71,7 @@ public class PlatMgrCtrl {
      * @return
      */
     @GetMapping("/getUserById")
-    public UserInfo getUserById(@RequestParam(value = "userId") String userId) {
+    public Object getUserById(@RequestParam(value = "userId") String userId, HttpServletRequest request) {
         return sanitizeUser(platMgrService.getUserById(userId));
     }
 
@@ -67,6 +81,9 @@ public class PlatMgrCtrl {
      */
     @PostMapping("/deleteUserById")
     public Map<String, Object> deleteUserById(@RequestParam(value = "userId") String userId, HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            return ApiResponse.failed(request, 403, "仅管理员可执行该操作", ErrorCode.AUTH_FORBIDDEN.code());
+        }
         if (!StringUtils.hasText(userId)) {
             return ApiResponse.failed(request, 400, "userId不能为空", ErrorCode.USER_ID_REQUIRED.code());
         }
@@ -81,12 +98,20 @@ public class PlatMgrCtrl {
      */
     @PostMapping("/addUser")
     public Map<String, Object> addUser(@RequestBody UserInfo user, HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            return ApiResponse.failed(request, 403, "仅管理员可执行该操作", ErrorCode.AUTH_FORBIDDEN.code());
+        }
         String validateMsg = validateUserFields(user, true);
         if (validateMsg != null) {
             return ApiResponse.failed(request, 400, validateMsg, ErrorCode.USER_FIELD_INVALID.code());
         }
+        if (user != null && !StringUtils.hasText(user.getUserId())) {
+            // 避免前端传空字符串ID导致Mongo将空ID落库，后续登录/重置密码失效
+            user.setUserId(null);
+        }
         if (user != null && user.getRole() == null) {
-            user.setRole(1);
+            // 默认新用户为普通用户，避免权限越权
+            user.setRole(0);
         }
         if (user != null && user.getPassword() != null && !user.getPassword().trim().isEmpty()) {
             user.setPassword(passwordService.encode(user.getPassword()));
@@ -105,10 +130,32 @@ public class PlatMgrCtrl {
      * @return
      */
     @GetMapping("/getUserByRegexName")
-    public List<UserInfo> getUserByName(@RequestParam(value = "userName") String userName,
+    public Object getUserByName(@RequestParam(value = "userName") String userName,
                                   @RequestParam(value = "pageNum") int pageNum,
-                                  @RequestParam(value = "pageSize") int pageSize) {
-        return sanitizeUsers(platMgrService.getUsersByName(userName, pageNum, pageSize));
+                                  @RequestParam(value = "pageSize") int pageSize,
+                                  HttpServletRequest request) {
+        int safePageNum = Math.max(1, pageNum);
+        int safePageSize = pageSize <= 0 ? 10 : pageSize;
+        String keyword = userName == null ? "" : userName.trim().toLowerCase();
+        List<UserInfo> filtered = new ArrayList<>();
+        List<UserInfo> all = platMgrService.getUsers();
+        if (all != null) {
+            for (UserInfo item : all) {
+                if (item == null || !StringUtils.hasText(item.getUserName())) {
+                    continue;
+                }
+                if (!StringUtils.hasText(keyword) || item.getUserName().trim().toLowerCase().contains(keyword)) {
+                    filtered.add(item);
+                }
+            }
+        }
+        List<UserInfo> sorted = sortUsersForPlatform(filtered);
+        if (sorted.isEmpty()) {
+            return Collections.emptyList();
+        }
+        int from = Math.min((safePageNum - 1) * safePageSize, sorted.size());
+        int to = Math.min(from + safePageSize, sorted.size());
+        return sanitizeUsers(sorted.subList(from, to));
     }
 
     /**
@@ -117,7 +164,7 @@ public class PlatMgrCtrl {
      * @return
      */
     @GetMapping("/getUserByName")
-    public UserInfo getUserByName(@RequestParam(value = "userName") String userName) {
+    public Object getUserByName(@RequestParam(value = "userName") String userName, HttpServletRequest request) {
         UserInfo user = platMgrService.getUserByName(userName);
         return sanitizeUser(user);
     }
@@ -128,19 +175,30 @@ public class PlatMgrCtrl {
      */
     @PostMapping("/updateUserById")
     public Map<String, Object> updateUserById(@RequestBody UserInfo user, HttpServletRequest request) {
+        if (user == null) {
+            return ApiResponse.failed(request, 400, "用户信息不能为空", ErrorCode.USER_FIELD_INVALID.code());
+        }
+        String targetUserId = resolveTargetUserId(user, request);
+        if (!StringUtils.hasText(targetUserId)) {
+            return ApiResponse.failed(request, 400, "用户标识异常，无法保存，请刷新后重试", ErrorCode.USER_ID_REQUIRED.code());
+        }
+        if (!canManageTargetUser(request, targetUserId)) {
+            return ApiResponse.failed(request, 403, "当前账号无权限修改该用户信息", ErrorCode.AUTH_FORBIDDEN.code());
+        }
+        user.setUserId(targetUserId);
         String validateMsg = validateUserFields(user, false);
         if (validateMsg != null) {
             return ApiResponse.failed(request, 400, validateMsg, ErrorCode.USER_FIELD_INVALID.code());
         }
-        if (user != null && user.getRole() == null && user.getUserId() != null) {
+        if (user.getRole() == null) {
             UserInfo current = platMgrService.getUserById(user.getUserId());
             if (current != null) {
                 user.setRole(current.getRole());
             }
         }
-        if (user != null && (user.getPassword() == null || user.getPassword().trim().isEmpty())) {
+        if (user.getPassword() == null || user.getPassword().trim().isEmpty()) {
             user.setPassword(null);
-        } else if (user != null) {
+        } else {
             user.setPassword(passwordService.encode(user.getPassword()));
         }
         platMgrService.updateUserById(user);
@@ -151,10 +209,17 @@ public class PlatMgrCtrl {
 
     @PostMapping("/resetUserPassword")
     public Map<String, Object> resetUserPassword(@RequestBody UserInfo user, HttpServletRequest request) {
-        if (user == null || user.getUserId() == null || user.getPassword() == null || user.getPassword().trim().isEmpty()) {
-            return ApiResponse.failed(request, 400, "userId和password不能为空", ErrorCode.USER_RESET_PASSWORD_INVALID.code());
+        if (user == null || !StringUtils.hasText(user.getPassword())) {
+            return ApiResponse.failed(request, 400, "password不能为空", ErrorCode.USER_RESET_PASSWORD_INVALID.code());
         }
-        UserInfo current = platMgrService.getUserById(user.getUserId());
+        String targetUserId = resolveTargetUserId(user, request);
+        if (!StringUtils.hasText(targetUserId)) {
+            return ApiResponse.failed(request, 400, "用户标识异常，无法重置密码，请刷新后重试", ErrorCode.USER_ID_REQUIRED.code());
+        }
+        if (!canManageTargetUser(request, targetUserId)) {
+            return ApiResponse.failed(request, 403, "当前账号无权限重置该用户密码", ErrorCode.AUTH_FORBIDDEN.code());
+        }
+        UserInfo current = platMgrService.getUserById(targetUserId);
         if (current == null) {
             return ApiResponse.failed(request, 404, "用户不存在", ErrorCode.USER_NOT_FOUND.code());
         }
@@ -163,7 +228,7 @@ public class PlatMgrCtrl {
         }
         current.setPassword(passwordService.encode(user.getPassword()));
         platMgrService.updateUserById(current);
-        log.info("traceId={} path={} action=resetPassword userId={}", TraceContext.getTraceId(request), "/api/PlatController/resetUserPassword", user.getUserId());
+        log.info("traceId={} path={} action=resetPassword userId={}", TraceContext.getTraceId(request), "/api/PlatController/resetUserPassword", targetUserId);
         return ApiResponse.ok(request, null);
     }
 
@@ -172,7 +237,7 @@ public class PlatMgrCtrl {
      * @return
      */
     @GetMapping("/countAllUsers")
-    public long countAllUsers() {
+    public Object countAllUsers(HttpServletRequest request) {
         long count = platMgrService.countAllUsers();
         return count;
     }
@@ -183,9 +248,20 @@ public class PlatMgrCtrl {
      * @return
      */
     @GetMapping("/countByUserName")
-    public long countByUserName(@RequestParam(value = "userName") String userName) {
+    public Object countByUserName(@RequestParam(value = "userName") String userName, HttpServletRequest request) {
         long count = platMgrService.countByUserName(userName);
         return count;
+    }
+
+    @PostMapping("/repairInvalidUserIds")
+    public Map<String, Object> repairInvalidUserIds(HttpServletRequest request) {
+        if (!isAdmin(request)) {
+            return ApiResponse.failed(request, 403, "仅管理员可执行该操作", ErrorCode.AUTH_FORBIDDEN.code());
+        }
+        Map<String, Object> result = platMgrService.repairInvalidUserIds();
+        log.info("traceId={} path={} action=repairInvalidUserIds result={}",
+                TraceContext.getTraceId(request), "/api/PlatController/repairInvalidUserIds", result);
+        return ApiResponse.ok(request, result);
     }
 
     private List<UserInfo> sanitizeUsers(List<UserInfo> users) {
@@ -242,5 +318,129 @@ public class PlatMgrCtrl {
             return qqMsg;
         }
         return null;
+    }
+
+    private boolean isAdmin(HttpServletRequest request) {
+        if (request == null) {
+            return false;
+        }
+        Object authObj = request.getAttribute("authUser");
+        if (!(authObj instanceof AuthUser)) {
+            return false;
+        }
+        AuthUser auth = (AuthUser) authObj;
+        return auth.getRole() != null && auth.getRole() == 1;
+    }
+
+    private boolean canManageTargetUser(HttpServletRequest request, String targetUserId) {
+        if (isAdmin(request)) {
+            return true;
+        }
+        if (!StringUtils.hasText(targetUserId) || request == null) {
+            return false;
+        }
+        Object authObj = request.getAttribute("authUser");
+        if (!(authObj instanceof AuthUser)) {
+            return false;
+        }
+        AuthUser auth = (AuthUser) authObj;
+        String authUserId = auth.getUserId();
+        if (StringUtils.hasText(authUserId) && targetUserId.trim().equals(authUserId.trim())) {
+            return true;
+        }
+        if (!StringUtils.hasText(authUserId) && StringUtils.hasText(auth.getUserName())) {
+            UserInfo self = platMgrService.getUserByName(auth.getUserName());
+            return self != null && StringUtils.hasText(self.getUserId()) && targetUserId.trim().equals(self.getUserId().trim());
+        }
+        return false;
+    }
+
+    private String resolveTargetUserId(UserInfo user, HttpServletRequest request) {
+        if (user == null) {
+            return "";
+        }
+        if (StringUtils.hasText(user.getUserId())) {
+            return user.getUserId().trim();
+        }
+        if (StringUtils.hasText(user.getUserName())) {
+            UserInfo existed = findByUserNameLoose(user.getUserName().trim());
+            if (existed != null && StringUtils.hasText(existed.getUserId())) {
+                return existed.getUserId().trim();
+            }
+        }
+        AuthUser auth = currentAuth(request);
+        if (auth == null) {
+            return "";
+        }
+        if (StringUtils.hasText(auth.getUserId())) {
+            return auth.getUserId().trim();
+        }
+        if (StringUtils.hasText(auth.getUserName())) {
+            UserInfo self = findByUserNameLoose(auth.getUserName().trim());
+            if (self != null && StringUtils.hasText(self.getUserId())) {
+                return self.getUserId().trim();
+            }
+        }
+        return "";
+    }
+
+    private AuthUser currentAuth(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        Object authObj = request.getAttribute("authUser");
+        if (!(authObj instanceof AuthUser)) {
+            return null;
+        }
+        return (AuthUser) authObj;
+    }
+
+    private UserInfo findByUserNameLoose(String userName) {
+        if (!StringUtils.hasText(userName)) {
+            return null;
+        }
+        UserInfo exact = platMgrService.getUserByName(userName);
+        if (exact != null) {
+            return exact;
+        }
+        List<UserInfo> candidates = platMgrService.getUsersByName(userName, 1, 20);
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        for (UserInfo candidate : candidates) {
+            if (candidate != null
+                    && StringUtils.hasText(candidate.getUserName())
+                    && userName.equalsIgnoreCase(candidate.getUserName().trim())) {
+                return candidate;
+            }
+        }
+        return candidates.get(0);
+    }
+
+    private List<UserInfo> sortUsersForPlatform(List<UserInfo> users) {
+        if (users == null || users.isEmpty()) {
+            return users == null ? Collections.emptyList() : users;
+        }
+        List<UserInfo> sorted = new ArrayList<>(users);
+        sorted.sort(Comparator
+                .comparing((UserInfo u) -> !isAdminUserName(u))
+                .thenComparing(this::extractCreatedAt, Comparator.reverseOrder()));
+        return sorted;
+    }
+
+    private boolean isAdminUserName(UserInfo user) {
+        return user != null && StringUtils.hasText(user.getUserName())
+                && "admin".equalsIgnoreCase(user.getUserName().trim());
+    }
+
+    private long extractCreatedAt(UserInfo user) {
+        if (user == null || !StringUtils.hasText(user.getUserId())) {
+            return 0L;
+        }
+        String id = user.getUserId().trim();
+        if (!ObjectId.isValid(id)) {
+            return 0L;
+        }
+        return new ObjectId(id).getDate().getTime();
     }
 }

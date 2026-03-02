@@ -4,6 +4,7 @@ import fjnu.edu.platmgr.entity.UserInfo;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public interface PlatMgrService {
@@ -65,5 +66,7 @@ public interface PlatMgrService {
     public long countAllUsers();
 
     public long countByUserName(String userName);
+
+    Map<String, Object> repairInvalidUserIds();
 
 }

@@ -81,11 +81,12 @@ public class NotificationCtrl {
                                     @RequestParam(required = false, defaultValue = "20") int pageSize,
                                     HttpServletRequest request) {
         AuthUser auth = currentAuth(request);
-        if (auth == null || !StringUtils.hasText(auth.getUserId())) {
+        String authUserId = resolveAuthUserId(auth);
+        if (!StringUtils.hasText(authUserId)) {
             return ApiResponse.failed(request, 401, "未登录", ErrorCode.AUTH_UNAUTHORIZED.code());
         }
         boolean admin = auth.getRole() != null && auth.getRole() == 1;
-        String effectiveUserId = admin ? userId : auth.getUserId();
+        String effectiveUserId = admin ? userId : authUserId;
         List<NotificationOutbox> items = notificationService.listOutbox(planId, executionId, effectiveUserId, status, fromTs, toTs, pageNum, pageSize);
         long total = notificationService.countOutbox(planId, executionId, effectiveUserId, status, fromTs, toTs);
         Map<String, Object> data = new HashMap<>();
@@ -100,7 +101,8 @@ public class NotificationCtrl {
     @PostMapping("/resend")
     public Map<String, Object> resend(@RequestParam String notificationId, HttpServletRequest request) {
         AuthUser auth = currentAuth(request);
-        if (auth == null || !StringUtils.hasText(auth.getUserId())) {
+        String authUserId = resolveAuthUserId(auth);
+        if (!StringUtils.hasText(authUserId)) {
             return ApiResponse.failed(request, 401, "未登录", ErrorCode.AUTH_UNAUTHORIZED.code());
         }
         NotificationOutbox target = notificationService.getOutboxById(notificationId);
@@ -108,7 +110,7 @@ public class NotificationCtrl {
             return ApiResponse.failed(request, 404, "通知记录不存在", ErrorCode.INVALID_ARGUMENT.code());
         }
         boolean admin = auth.getRole() != null && auth.getRole() == 1;
-        if (!admin && !auth.getUserId().equals(target.getUserId())) {
+        if (!admin && !authUserId.equals(target.getUserId())) {
             return ApiResponse.failed(request, 403, "无权限操作该通知记录", ErrorCode.AUTH_UNAUTHORIZED.code());
         }
         NotificationOutbox created = notificationService.manualResend(notificationId);
@@ -116,7 +118,7 @@ public class NotificationCtrl {
             return ApiResponse.failed(request, 500, "补发任务创建失败", ErrorCode.INTERNAL_ERROR.code());
         }
         log.info("traceId={} userId={} path={} notificationId={} createdId={}",
-                TraceContext.getTraceId(request), auth.getUserId(), "/api/notification/resend", notificationId, created.getNotificationId());
+                TraceContext.getTraceId(request), authUserId, "/api/notification/resend", notificationId, created.getNotificationId());
         return ApiResponse.ok(request, created, "补发任务已创建");
     }
 
@@ -125,11 +127,12 @@ public class NotificationCtrl {
                                                  @RequestParam String executionId,
                                                  HttpServletRequest request) {
         AuthUser auth = currentAuth(request);
-        if (auth == null || !StringUtils.hasText(auth.getUserId())) {
+        String authUserId = resolveAuthUserId(auth);
+        if (!StringUtils.hasText(authUserId)) {
             return ApiResponse.failed(request, 401, "未登录", ErrorCode.AUTH_UNAUTHORIZED.code());
         }
         boolean admin = auth.getRole() != null && auth.getRole() == 1;
-        String userScope = admin ? null : auth.getUserId();
+        String userScope = admin ? null : authUserId;
         int count = notificationService.manualResendByExecution(planId, executionId, userScope);
         Map<String, Object> data = new HashMap<>();
         data.put("createdCount", count);
@@ -164,14 +167,33 @@ public class NotificationCtrl {
 
     private UserInfo currentUser(HttpServletRequest request) {
         AuthUser auth = currentAuth(request);
-        if (auth == null || !StringUtils.hasText(auth.getUserId())) {
+        if (auth == null) {
             return null;
         }
-        UserInfo user = platMgrService.getUserById(auth.getUserId());
+        UserInfo user = null;
+        if (StringUtils.hasText(auth.getUserId())) {
+            user = platMgrService.getUserById(auth.getUserId());
+        }
         if (user == null && StringUtils.hasText(auth.getUserName())) {
             user = platMgrService.getUserByName(auth.getUserName());
         }
         return user;
+    }
+
+    private String resolveAuthUserId(AuthUser auth) {
+        if (auth == null) {
+            return "";
+        }
+        if (StringUtils.hasText(auth.getUserId())) {
+            return auth.getUserId().trim();
+        }
+        if (StringUtils.hasText(auth.getUserName())) {
+            UserInfo user = platMgrService.getUserByName(auth.getUserName().trim());
+            if (user != null && StringUtils.hasText(user.getUserId())) {
+                return user.getUserId().trim();
+            }
+        }
+        return "";
     }
 
     private String stringValue(Object value) {

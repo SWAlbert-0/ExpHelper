@@ -1,0 +1,8 @@
+﻿{
+  "categoryName": "moo-zdt1-python",
+  "instName": "zdt1-py-caseA",
+  "machineIp": "127.0.0.1",
+  "dirName": "cases/python/nsga2/zdt1/caseA",
+  "machineName": "local-python",
+  "description": "Python NSGA-II style ZDT1 baseline; nVars=100"
+}

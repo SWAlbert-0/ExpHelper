@@ -2,6 +2,10 @@
 
 export const planExecutionMethods = {
   doExePlan(scope) {
+    if (typeof this.canExecutePlan === "function" && !this.canExecutePlan(scope)) {
+      this.$message({ type: "warning", message: "当前账号仅可执行自己创建的计划" });
+      return;
+    }
     if (scope.exeState !== "未执行") {
       return;
     }
@@ -9,6 +13,10 @@ export const planExecutionMethods = {
   },
 
   reExecutePlan(scope) {
+    if (typeof this.canExecutePlan === "function" && !this.canExecutePlan(scope)) {
+      this.$message({ type: "warning", message: "当前账号仅可重新执行自己创建的计划" });
+      return;
+    }
     if (scope.exeState !== "异常结束") {
       return;
     }

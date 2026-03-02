@@ -303,8 +303,68 @@ test("plan manage view supports execution log polling dialog", async ({ page }) 
   await page.getByRole("button", { name: /登\s*录/ }).click();
   await page.getByRole("menubar").getByRole("link", { name: "执行计划管理" }).click();
 
-  await page.getByRole("button", { name: "查看" }).click();
+  await page.locator(".plan-list-table").getByRole("button", { name: "查看" }).first().click();
   await page.getByRole("button", { name: "执行日志" }).click();
   await expect(page.getByRole("dialog", { name: "执行日志" })).toBeVisible();
   await expect(page.getByText("计划开始执行")).toBeVisible();
+});
+
+test("plan list query sends fuzzy planName condition", async ({ page }) => {
+  const seenPlanNames = [];
+  await page.route("**/api/**", async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ code: 200, data: null })
+    });
+  });
+  await page.route("**/api/auth/login", async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ code: 200, data: { token: "pw-mock-token" } })
+    });
+  });
+  await page.route("**/api/auth/me", async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: 200,
+        data: {
+          user: { userId: "pw-user", username: "admin", name: "管理员", avatar: "", unread_msg_count: 0 },
+          roles: ["admin"],
+          permissions: ["*:*:*"]
+        }
+      })
+    });
+  });
+  await page.route("**/api/ProbController/getProblems**", async route => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await page.route("**/api/AlgController/getAlgs**", async route => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await page.route("**/api/PlatController/getUsersByPage**", async route => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await page.route("**/api/ExePlanController/getExePlans**", async route => {
+    const url = new URL(route.request().url());
+    seenPlanNames.push(url.searchParams.get("planName") || "");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
+  });
+  await page.route("**/api/ExePlanController/countAllExePlans**", async route => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(0) });
+  });
+
+  await page.goto("/login");
+  await page.getByPlaceholder("账号").fill("admin");
+  await page.getByPlaceholder("密码").fill("123456");
+  await page.getByRole("button", { name: /登\s*录/ }).click();
+  await page.getByRole("menubar").getByRole("link", { name: "执行计划管理" }).click();
+  await expect(page).toHaveURL(/#\/exePlan\/index(\?.*)?$/);
+
+  await page.locator(".plan-search-form").getByPlaceholder("请输入计划名称").fill("test");
+  await page.getByRole("button", { name: "查询" }).click();
+  await expect.poll(() => seenPlanNames.includes("test")).toBeTruthy();
 });

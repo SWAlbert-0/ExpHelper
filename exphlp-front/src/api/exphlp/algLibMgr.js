@@ -143,3 +143,19 @@ export function getAlgBuildLogs(taskId, tail = 200) {
     params: { taskId, tail },
   });
 }
+
+export function getAlgSourceRuntimeInfo(algId) {
+  return request({
+    url: "/api/AlgController/sourceRuntimeInfo",
+    method: "get",
+    params: { algId },
+  });
+}
+
+export function operateAlgSourceRuntime(algId, action) {
+  return request({
+    url: "/api/AlgController/sourceRuntimeOperate",
+    method: "post",
+    params: { algId, action },
+  });
+}

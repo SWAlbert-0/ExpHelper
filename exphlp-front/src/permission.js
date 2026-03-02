@@ -9,6 +9,19 @@ NProgress.configure({ showSpinner: false });
 
 const whiteList = ["/login", "/auth-redirect", "/bind", "/register"];
 
+function hasRoutePermission(roles, to) {
+  const roleList = Array.isArray(roles) ? roles : [];
+  const matched = Array.isArray(to.matched) ? to.matched : [];
+  const required = matched
+    .map(r => (r.meta && Array.isArray(r.meta.roles) ? r.meta.roles : null))
+    .filter(Boolean)
+    .flat();
+  if (required.length === 0) {
+    return true;
+  }
+  return required.some(role => roleList.includes(role));
+}
+
 router.beforeEach((to, from, next) => {
   NProgress.start();
   if (getToken()) {
@@ -25,6 +38,10 @@ router.beforeEach((to, from, next) => {
           store.dispatch("GenerateRoutes", { roles }).then(accessRoutes => {
             // 根据roles权限生成可访问的路由表
             router.addRoutes(accessRoutes); // 动态添加可访问路由表
+            if (!hasRoutePermission(roles, to)) {
+              next({ path: "/401", replace: true });
+              return;
+            }
             next({ ...to, replace: true }); // hack方法 确保addRoutes已完成
           });
         }).catch(err => {
@@ -34,6 +51,11 @@ router.beforeEach((to, from, next) => {
           });
         });
       } else {
+        if (!hasRoutePermission(store.getters.roles, to)) {
+          next("/401");
+          NProgress.done();
+          return;
+        }
         next();
       }
     }

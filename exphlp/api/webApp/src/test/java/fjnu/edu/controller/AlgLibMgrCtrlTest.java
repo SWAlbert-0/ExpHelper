@@ -2,6 +2,7 @@ package fjnu.edu.controller;
 
 import fjnu.edu.algruntime.entity.AlgBuildTask;
 import fjnu.edu.algruntime.service.AlgBuildTaskService;
+import fjnu.edu.auth.AuthUser;
 import fjnu.edu.alglibmgr.service.AlgLibMgrService;
 import fjnu.edu.alglibmgr.entity.AlgDeleteResult;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
@@ -17,7 +18,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -122,9 +122,9 @@ class AlgLibMgrCtrlTest {
 
     @Test
     void deleteAlgByIdReturns400WhenAlgIdEmpty() {
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> controller.deleteAlgInfoById(" ", new MockHttpServletRequest()));
-        assertEquals("算法ID不能为空", ex.getMessage());
+        Map<String, Object> response = controller.deleteAlgInfoById(" ", new MockHttpServletRequest());
+        assertEquals(400, response.get("code"));
+        assertEquals("INVALID_ARGUMENT", response.get("errorCode"));
     }
 
     @Test
@@ -181,9 +181,10 @@ class AlgLibMgrCtrlTest {
         info.setDescription("demo");
         when(algLibMgrService.getAlgInfoByName("demo-add")).thenReturn(null);
 
-        String result = controller.addAlgInfo(info);
+        Map<String, Object> response = controller.addAlgInfo(info, adminRequest());
 
-        assertEquals("demo-add", result);
+        assertEquals(200, response.get("code"));
+        assertEquals("demo-add", response.get("data"));
         org.mockito.ArgumentCaptor<AlgInfo> captor = org.mockito.ArgumentCaptor.forClass(AlgInfo.class);
         verify(algLibMgrService).addAlgInfo(captor.capture());
         assertEquals("java", captor.getValue().getRuntimeType());
@@ -215,7 +216,7 @@ class AlgLibMgrCtrlTest {
                 .thenReturn(task);
 
         MockMultipartFile file = new MockMultipartFile("file", "demo.zip", "application/zip", "zip".getBytes());
-        Map<String, Object> response = controller.uploadSource("alg-1", file, new MockHttpServletRequest());
+        Map<String, Object> response = controller.uploadSource("alg-1", file, adminRequest());
 
         assertEquals(200, response.get("code"));
     }
@@ -225,5 +226,11 @@ class AlgLibMgrCtrlTest {
         when(algBuildTaskService.getTask("missing")).thenReturn(null);
         Map<String, Object> response = controller.getBuildStatus("missing", new MockHttpServletRequest());
         assertEquals(404, response.get("code"));
+    }
+
+    private MockHttpServletRequest adminRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("authUser", new AuthUser("admin-id", "admin", 1));
+        return request;
     }
 }

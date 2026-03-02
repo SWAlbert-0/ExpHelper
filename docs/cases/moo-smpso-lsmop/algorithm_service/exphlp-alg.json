@@ -1,0 +1,5 @@
+{
+  "runtimeType": "java",
+  "serviceName": "smpso-lsmop-ls",
+  "port": 18084
+}

@@ -7,27 +7,19 @@
       show-icon
       style="margin-bottom: 12px;"
     />
-    <!-- 添加 批量删除 查询-->
-    <el-row>
-      <el-col :span="2">
+    <div class="toolbar-row">
+      <div class="toolbar-left">
         <el-button type="success" icon="el-icon-plus" @click="addForm()">添加</el-button>
-      </el-col>
-      <el-col :span="2">
         <el-button type="primary" icon="el-icon-upload2" @click="openImportDialog()">JSON导入</el-button>
-      </el-col>
-      <el-col :span="2">
         <el-button type="danger" icon="el-icon-delete" :loading="batchDeleteLoading" @click="deleteBatch()">批量删除</el-button>
-      </el-col>
-      <el-col :span="18">
-        <el-form :inline="true" class="demo-form-inline" align="center">
-          <el-form-item>
-            <el-input v-model="instName" placeholder="请输入实例名" clearable/>
-          </el-form-item>
-          <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getByInstName()">查询</el-button>
-          <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
-        </el-form>
-      </el-col>
-    </el-row>
+        <el-button type="default" icon="el-icon-document" @click="openManualDialog">查看操作手册</el-button>
+      </div>
+      <div class="toolbar-right">
+        <el-input v-model="instName" placeholder="请输入实例名" clearable class="toolbar-search-input"/>
+        <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getByInstName()">查询</el-button>
+        <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
+      </div>
+    </div>
     <!-- 表格 -->
     <el-table
       :data="tableData"
@@ -47,14 +39,14 @@
       <el-table-column prop="description" label="实例描述" align="center" show-overflow-tooltip></el-table-column>
       <el-table-column label="操作" align="center" width="350">
         <template slot-scope="scope">
-          <el-button type="primary" size="mini" icon="el-icon-view" @click="getForm(scope.row)">查看</el-button>
-          <el-button type="primary" size="mini" icon="el-icon-edit" @click="updateForm(scope.row)">编辑</el-button>
+        <el-button type="primary" size="mini" icon="el-icon-view" @click="getForm(scope.row)">查看</el-button>
+          <el-button type="primary" size="mini" icon="el-icon-edit" :disabled="!canManageProb(scope.row)" @click="updateForm(scope.row)">编辑</el-button>
           <el-button
             type="danger"
             size="mini"
             icon="el-icon-delete"
             :loading="!!deletingProbIds[scope.row.instId]"
-            :disabled="!!deletingProbIds[scope.row.instId]"
+            :disabled="!!deletingProbIds[scope.row.instId] || !canManageProb(scope.row)"
             @click="deleteForm(scope.row.instId)"
           >删除</el-button>
         </template>
@@ -174,6 +166,10 @@
         <el-button type="primary" :loading="importLoading" @click="submitImportJson">开始导入</el-button>
       </div>
     </el-dialog>
+    <manual-doc-dialog
+      :visible.sync="manualDialogVisible"
+      :page-key="manualPageKey"
+    />
   </div>
 </template>
 
@@ -190,8 +186,20 @@ import {
   importProbInstsJson
 } from "@/api/exphlp/probInstMgr";
 import { normalizeProblemImportJson } from "@/utils/jsonImportNormalizer";
+import ManualDocDialog from "@/components/ManualDocDialog";
+import { mapGetters } from "vuex";
 
 export default {
+  components: { ManualDocDialog },
+  computed: {
+    ...mapGetters([
+      "roles",
+      "name"
+    ]),
+    isAdmin() {
+      return Array.isArray(this.roles) && this.roles.includes("ROLE_ADMIN");
+    }
+  },
 
   data() {
     return {
@@ -214,6 +222,8 @@ export default {
         warnings: [],
         errors: [],
       },
+      manualDialogVisible: false,
+      manualPageKey: "problem",
       title: "",
       instName: '',
       form: {
@@ -303,6 +313,23 @@ export default {
     }
   },
   methods: {
+    canManageProb(row) {
+      if (this.isAdmin) {
+        return true;
+      }
+      if (!row) {
+        return false;
+      }
+      const ownerUserName = (row.ownerUserName || "").toString().trim();
+      if (ownerUserName) {
+        return ownerUserName === (this.name || "").toString().trim();
+      }
+      return false;
+    },
+    openManualDialog() {
+      this.manualPageKey = "problem";
+      this.manualDialogVisible = true;
+    },
     listProbInsts() {
       this.tableLoading = true;
       getProbInstList(this.pageHelper.currentPageNum,this.pageHelper.pageSize).then(res => {
@@ -478,12 +505,21 @@ export default {
       this.title = "查看";
     },
     updateForm(row){
+      if (!this.canManageProb(row)) {
+        this.$message({ type: "warning", message: "仅可编辑自己创建的问题实例" });
+        return;
+      }
       this.form = row;
       this.dialogVisible = true;
       this.canEdit = true;
       this.title = "编辑";
     },
     deleteForm(instId){
+      const row = (this.tableData || []).find((item) => item.instId === instId);
+      if (row && !this.canManageProb(row)) {
+        this.$message({ type: "warning", message: "仅可删除自己创建的问题实例" });
+        return;
+      }
       this.$confirm("此操作将永久删除问题实例记录, 是否继续?", "提示", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
@@ -526,7 +562,13 @@ export default {
         })
           .then(() => {
             this.batchDeleteLoading = true;
-            const tasks = this.multipleSelection.map(item => deleteProbInstById(item.instId));
+            const selected = this.multipleSelection.filter((item) => this.canManageProb(item));
+            if (selected.length === 0) {
+              this.batchDeleteLoading = false;
+              this.$message({ type: "warning", message: "仅可批量删除自己创建的问题实例" });
+              return;
+            }
+            const tasks = selected.map(item => deleteProbInstById(item.instId));
             Promise.allSettled(tasks).then((results) => {
               let deletedCount = 0;
               let noopCount = 0;
@@ -536,7 +578,7 @@ export default {
               const failedIds = [];
               for (let i = 0; i < results.length; i++) {
                 const current = results[i];
-                const currentId = this.multipleSelection[i] && this.multipleSelection[i].instId ? this.multipleSelection[i].instId : "";
+                const currentId = selected[i] && selected[i].instId ? selected[i].instId : "";
                 if (current.status === "fulfilled") {
                   const state = this.extractDeleteState(current.value, currentId);
                   if (state.deletedCount > 0) {
@@ -725,6 +767,27 @@ export default {
 </script>
 
 <style lang="less" scoped>
+.toolbar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.toolbar-right {
+  margin-left: auto;
+}
+.toolbar-search-input {
+  width: 240px;
+}
 .import-dropzone {
   display: flex;
   align-items: center;
@@ -744,5 +807,14 @@ export default {
 }
 .import-file-input {
   display: none;
+}
+@media (max-width: 1200px) {
+  .toolbar-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .toolbar-right {
+    margin-left: 0;
+  }
 }
 </style>

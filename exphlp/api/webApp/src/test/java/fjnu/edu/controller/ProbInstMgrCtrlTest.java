@@ -13,7 +13,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -102,9 +101,9 @@ class ProbInstMgrCtrlTest {
 
     @Test
     void deleteProblemByIdReturns400WhenIdEmpty() {
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> controller.delProbInstByID(" ", new MockHttpServletRequest()));
-        assertEquals("问题实例ID不能为空", ex.getMessage());
+        Map<String, Object> response = controller.delProbInstByID(" ", new MockHttpServletRequest());
+        assertEquals(400, response.get("code"));
+        assertEquals("INVALID_ARGUMENT", response.get("errorCode"));
     }
 
     @Test

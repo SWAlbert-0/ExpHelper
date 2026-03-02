@@ -53,7 +53,15 @@ Expand-Archive -Path $SourceZip -DestinationPath $srcDir -Force
 
 $metaPath = Join-Path $srcDir "exphlp-alg.json"
 if (-not (Test-Path $metaPath)) {
-    Fail "缺少 exphlp-alg.json"
+    $metaCandidates = Get-ChildItem -Path $srcDir -Filter "exphlp-alg.json" -File -Recurse -ErrorAction SilentlyContinue
+    if (-not $metaCandidates -or $metaCandidates.Count -eq 0) {
+        Fail "缺少 exphlp-alg.json"
+    }
+    $metaPath = $metaCandidates[0].FullName
+}
+$projectRoot = Split-Path -Path $metaPath -Parent
+if (-not (Test-Path $projectRoot)) {
+    Fail "项目目录不存在: $projectRoot"
 }
 
 $meta = Get-Content $metaPath -Raw | ConvertFrom-Json
@@ -77,7 +85,7 @@ if (-not $networkExists) {
 }
 
 if ($RuntimeType -eq "java") {
-    if (-not (Test-Path (Join-Path $srcDir "pom.xml"))) {
+    if (-not (Test-Path (Join-Path $projectRoot "pom.xml"))) {
         Fail "Java 工程缺少 pom.xml"
     }
     $dockerfile = @"
@@ -92,16 +100,17 @@ COPY --from=build /build/target/*.jar /app/app.jar
 ENV SERVER_PORT=$port
 ENTRYPOINT ["java","-jar","/app/app.jar"]
 "@
-    Set-Content -Path (Join-Path $srcDir "Dockerfile.generated") -Value $dockerfile -Encoding UTF8
+    Set-Content -Path (Join-Path $projectRoot "Dockerfile.generated") -Value $dockerfile -Encoding UTF8
 } else {
     $entry = (($meta.entry | Out-String).Trim())
     if (-not $entry) {
         $entry = "main:app"
     }
-    if (-not (Test-Path (Join-Path $srcDir "requirements.txt")) -and -not (Test-Path (Join-Path $srcDir "pyproject.toml"))) {
+    if (-not (Test-Path (Join-Path $projectRoot "requirements.txt")) -and -not (Test-Path (Join-Path $projectRoot "pyproject.toml"))) {
         Fail "Python 工程缺少 requirements.txt 或 pyproject.toml"
     }
     $runner = @"
+import json
 import os
 import socket
 import threading
@@ -109,8 +118,23 @@ import time
 import requests
 import uvicorn
 
+NACOS_HTTP = requests.Session()
+NACOS_HTTP.trust_env = False
+
 def local_ip():
-    return socket.gethostbyname(socket.gethostname())
+    forced = os.getenv("ALG_REGISTER_IP", "").strip()
+    if forced:
+        return forced
+    try:
+        for item in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if item and not item.startswith("127."):
+                return item
+    except Exception:
+        pass
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except Exception:
+        return "127.0.0.1"
 
 def register_nacos():
     nacos = os.getenv("NACOS_SERVER_ADDR", "host.docker.internal:8848")
@@ -121,48 +145,65 @@ def register_nacos():
     port = int(os.getenv("ALG_PORT", "$port"))
     namespace_id = os.getenv("NACOS_NAMESPACE", "public")
     group_name = os.getenv("NACOS_GROUP", "DEFAULT_GROUP")
-    requests.post(f"{nacos}/nacos/v1/ns/instance", data={
-        "serviceName": service_name,
-        "ip": ip,
-        "port": port,
-        "namespaceId": namespace_id,
-        "groupName": group_name,
-        "healthy": "true",
-        "enabled": "true",
-        "ephemeral": "true"
-    }, timeout=5)
+
     while True:
         try:
-            requests.put(f"{nacos}/nacos/v1/ns/instance/beat", data={
+            register_resp = NACOS_HTTP.post(f"{nacos}/nacos/v1/ns/instance", data={
                 "serviceName": service_name,
                 "ip": ip,
                 "port": port,
                 "namespaceId": namespace_id,
                 "groupName": group_name,
-                "beat": '{"ip":"%s","port":%d,"healthy":true}' % (ip, port)
+                "healthy": "true",
+                "enabled": "true",
+                "ephemeral": "true"
             }, timeout=5)
-        except Exception:
-            pass
-        time.sleep(5)
+            register_resp.raise_for_status()
+
+            while True:
+                beat = json.dumps({
+                    "serviceName": service_name,
+                    "ip": ip,
+                    "port": port,
+                    "healthy": True
+                }, separators=(",", ":"))
+                beat_resp = NACOS_HTTP.put(f"{nacos}/nacos/v1/ns/instance/beat", data={
+                    "serviceName": service_name,
+                    "ip": ip,
+                    "port": port,
+                    "namespaceId": namespace_id,
+                    "groupName": group_name,
+                    "ephemeral": "true",
+                    "beat": beat
+                }, timeout=5)
+                beat_resp.raise_for_status()
+                time.sleep(5)
+        except Exception as ex:
+            print(f"[NACOS] register/beat failed: {ex}", flush=True)
+            time.sleep(3)
 
 if __name__ == "__main__":
     threading.Thread(target=register_nacos, daemon=True).start()
     uvicorn.run("$entry", host="0.0.0.0", port=int(os.getenv("ALG_PORT", "$port")))
 "@
-    Set-Content -Path (Join-Path $srcDir "start_with_nacos.py") -Value $runner -Encoding UTF8
+    Set-Content -Path (Join-Path $projectRoot "start_with_nacos.py") -Value $runner -Encoding UTF8
     $dockerfile = @"
 FROM python:3.11-slim
 WORKDIR /app
 COPY . /app
-RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir uvicorn fastapi requests
+RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; elif [ -f pyproject.toml ]; then pip install --no-cache-dir .; else echo "missing requirements.txt or pyproject.toml" && exit 1; fi && pip install --no-cache-dir uvicorn fastapi requests
 ENV ALG_PORT=$port
 CMD ["python","start_with_nacos.py"]
 "@
-    Set-Content -Path (Join-Path $srcDir "Dockerfile.generated") -Value $dockerfile -Encoding UTF8
+    Set-Content -Path (Join-Path $projectRoot "Dockerfile.generated") -Value $dockerfile -Encoding UTF8
 }
 
 Write-Host "[INFO] 构建镜像: $ImageName" -ForegroundColor Cyan
-docker build -t $ImageName -f (Join-Path $srcDir "Dockerfile.generated") $srcDir
+docker build `
+  --label "exphlp.alg.id=$AlgId" `
+  --label "exphlp.alg.service=$ServiceName" `
+  --label "exphlp.alg.runtime=$RuntimeType" `
+  -t $ImageName -f (Join-Path $projectRoot "Dockerfile.generated") $projectRoot
 if ($LASTEXITCODE -ne 0) {
     Fail "Docker build 失败"
 }
@@ -171,10 +212,19 @@ Write-Host "[INFO] 移除旧容器: $ContainerName" -ForegroundColor Cyan
 docker rm -f $ContainerName 2>$null | Out-Null
 
 $args = @("run", "-d", "--name", $ContainerName,
+    "--label", "exphlp.alg.id=$AlgId",
+    "--label", "exphlp.alg.service=$ServiceName",
+    "--label", "exphlp.alg.runtime=$RuntimeType",
     "-e", "ALG_PORT=$port",
     "-e", "ALG_SERVICE_NAME=$ServiceName",
     "-e", "NACOS_NAMESPACE=public",
-    "-e", "NACOS_GROUP=DEFAULT_GROUP")
+    "-e", "NACOS_GROUP=DEFAULT_GROUP",
+    "-e", "HTTP_PROXY=",
+    "-e", "HTTPS_PROXY=",
+    "-e", "http_proxy=",
+    "-e", "https_proxy=",
+    "-e", "NO_PROXY=localhost,127.0.0.1,nacos,mongodb,rabbitmq",
+    "-e", "no_proxy=localhost,127.0.0.1,nacos,mongodb,rabbitmq")
 if ($networkName) {
     $args += @("-e", "NACOS_SERVER_ADDR=nacos:8848", "--network", $networkName)
 } else {

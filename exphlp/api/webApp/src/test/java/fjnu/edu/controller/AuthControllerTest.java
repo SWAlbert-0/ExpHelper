@@ -14,6 +14,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.*;
 
 class AuthControllerTest {
@@ -71,5 +72,40 @@ class AuthControllerTest {
 
         assertEquals(400, response.get("code"));
         assertEquals("USER_MOBILE_INVALID", response.get("errorCode"));
+    }
+
+    @Test
+    void profileFallsBackToUserNameWhenTokenUserIdBlank() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("authUser", new AuthUser("", "new-user", 1));
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId("uid-1");
+        userInfo.setUserName("new-user");
+
+        when(platMgrService.getUserByName("new-user")).thenReturn(userInfo);
+
+        Map<String, Object> response = controller.profile(request);
+
+        assertEquals(200, response.get("code"));
+        verify(platMgrService, never()).getUserById(anyString());
+        verify(platMgrService).getUserByName("new-user");
+    }
+
+    @Test
+    void meReturnsAdminRoleForAdminUser() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute("authUser", new AuthUser("u-1", "admin", 1));
+        UserInfo userInfo = new UserInfo();
+        userInfo.setUserId("u-1");
+        userInfo.setUserName("admin");
+        userInfo.setRole(1);
+        when(platMgrService.getUserById("u-1")).thenReturn(userInfo);
+
+        Map<String, Object> response = controller.me(request);
+
+        assertEquals(200, response.get("code"));
+        Map<String, Object> data = (Map<String, Object>) response.get("data");
+        assertNotNull(data);
+        assertEquals("ROLE_ADMIN", ((java.util.List<?>) data.get("roles")).get(0));
     }
 }

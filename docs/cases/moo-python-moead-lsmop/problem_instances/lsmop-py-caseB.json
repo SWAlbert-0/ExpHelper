@@ -1,0 +1,8 @@
+﻿{
+  "categoryName": "moo-lsmop-python",
+  "instName": "lsmop-py-caseB",
+  "machineIp": "127.0.0.1",
+  "dirName": "cases/python/moead/lsmop/caseB",
+  "machineName": "local-python",
+  "description": "Python MOEA/D style LSMOP baseline; nVars=500"
+}

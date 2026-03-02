@@ -12,15 +12,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import com.mongodb.client.result.UpdateResult;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.data.domain.Sort;
 
+import java.util.regex.Pattern;
 import java.util.List;
 import java.util.Collections;
+import java.util.Arrays;
 
 @Service
 public class ExePlanMgrDao {
@@ -29,6 +33,14 @@ public class ExePlanMgrDao {
 
 
     public List<ExePlan> getExePlans(int pageNum, int pageSize) {
+        return getExePlans(pageNum, pageSize, null);
+    }
+
+    public List<ExePlan> getExePlans(int pageNum, int pageSize, String scope) {
+        return getExePlans(pageNum, pageSize, scope, null, null, null, null);
+    }
+
+    public List<ExePlan> getExePlans(int pageNum, int pageSize, String scope, String planName, Integer exeState, Long exeStartTime, Long exeEndTime) {
         //创建查询对象
         if (pageNum <= 0) {
             pageNum = 1;
@@ -41,7 +53,7 @@ public class ExePlanMgrDao {
         }
         Sort sort = Sort.by(Sort.Order.desc("_id"));
         Pageable pageable = PageRequest.of(pageNum, pageSize);
-        Query query = new Query().with(pageable).with(sort);
+        Query query = buildPlanQuery(scope, planName, exeState, exeStartTime, exeEndTime).with(pageable).with(sort);
         List<ExePlan> exeplanlist = mongoTemplate.find(query, ExePlan.class, "exePlanMgr");
         return exeplanlist;
     }
@@ -156,24 +168,63 @@ public class ExePlanMgrDao {
         if (exeplan == null || !StringUtils.hasText(exeplan.getPlanId())) {
             return false;
         }
+        Query query = new Query(new Criteria().andOperator(
+                buildIdCriteria(exeplan.getPlanId()),
+                Criteria.where("exeState").is(Constant.NON_EXECUTION)
+        ));
+        Update update = buildExePlanUpdate(exeplan);
+        UpdateResult result = mongoTemplate.updateFirst(query, update, ExePlan.class, "exePlanMgr");
+        return result != null && result.getMatchedCount() > 0;
+    }
+
+    /**
+     * 执行链路专用更新：不再要求当前状态必须是“未执行”，用于执行中->结束状态回写。
+     */
+    public boolean updateExePlanExecutionById(ExePlan exeplan) {
+        if (exeplan == null || !StringUtils.hasText(exeplan.getPlanId())) {
+            return false;
+        }
         Query query = new Query(buildIdCriteria(exeplan.getPlanId()));
-        Update update = new Update().set("planName", exeplan.getPlanName())
-                .set("probInstIds",exeplan.getProbInstIds())
-                .set("algRunInfos",exeplan.getAlgRunInfos())
-                .set("userIds",exeplan.getUserIds())
-                .set("description", exeplan.getDescription())
-                .set("exeStartTime", exeplan.getExeStartTime())
-                .set("exeEndTime", exeplan.getExeEndTime())
-                .set("exeState", exeplan.getExeState())
-                .set("lastError", exeplan.getLastError())
-                .set("executionId", exeplan.getExecutionId());
-        mongoTemplate.updateFirst(query, update, ExePlan.class, "exePlanMgr");
-        return true;
+        Update update = buildExePlanUpdate(exeplan);
+        UpdateResult result = mongoTemplate.updateFirst(query, update, ExePlan.class, "exePlanMgr");
+        return result != null && result.getMatchedCount() > 0;
     }
 
     public long countAllExePlans() {
-        long count = mongoTemplate.count(new Query(), ExePlan.class, "exePlanMgr");
-        return count;
+        return countAllExePlans(null);
+    }
+
+    public long countAllExePlans(String scope) {
+        return countAllExePlans(scope, null, null, null, null);
+    }
+
+    public long countAllExePlans(String scope, String planName, Integer exeState, Long exeStartTime, Long exeEndTime) {
+        Query query = buildPlanQuery(scope, planName, exeState, exeStartTime, exeEndTime);
+        return mongoTemplate.count(query, ExePlan.class, "exePlanMgr");
+    }
+
+    private Query buildPlanQuery(String scope, String planName, Integer exeState, Long exeStartTime, Long exeEndTime) {
+        Query query = new Query();
+        String normalizedScope = scope == null ? "" : scope.trim().toLowerCase();
+        if ("current".equals(normalizedScope)) {
+            query.addCriteria(Criteria.where("exeState").in(Constant.NON_EXECUTION, Constant.IN_EXECUTION));
+        } else if ("history".equals(normalizedScope)) {
+            query.addCriteria(Criteria.where("exeState").in(Constant.ABNORMAL_TERMINATION, Constant.NORMAL_TERMINATION));
+        }
+        if (StringUtils.hasText(planName)) {
+            String safe = Pattern.quote(planName.trim());
+            query.addCriteria(Criteria.where("planName").regex(".*" + safe + ".*", "i"));
+        }
+        if (exeState != null && exeState > 0) {
+            query.addCriteria(Criteria.where("exeState").is(exeState));
+        }
+        if (exeStartTime != null && exeStartTime > 0) {
+            query.addCriteria(Criteria.where("exeStartTime").gte(exeStartTime));
+        }
+        if (exeEndTime != null && exeEndTime > 0) {
+            query.addCriteria(Criteria.where("exeEndTime").lte(exeEndTime));
+        }
+        return query;
     }
 
     public long countPlansByProbInstId(String probInstId) {
@@ -287,6 +338,52 @@ public class ExePlanMgrDao {
         return mongoTemplate.find(query, ExePlanLog.class, "exePlanLog");
     }
 
+    /**
+     * 兜底修复：若计划状态仍为“执行中”，但日志中已出现 PLAN_DONE/PLAN_FAIL，
+     * 则自动回写为“正常结束/异常结束”。
+     */
+    public boolean repairExecutionStateFromLogs(String planId, String executionId) {
+        if (!StringUtils.hasText(planId)) {
+            return false;
+        }
+        ExePlan plan = getExePlanById(planId);
+        if (plan == null || plan.getExeState() != Constant.IN_EXECUTION) {
+            return false;
+        }
+        Criteria base = Criteria.where("planId").is(planId);
+        if (StringUtils.hasText(executionId)) {
+            base = base.and("executionId").is(executionId);
+        }
+        Query latestTerminalQuery = new Query(new Criteria().andOperator(
+                base,
+                Criteria.where("stage").in(Arrays.asList("PLAN_DONE", "PLAN_FAIL"))
+        )).with(Sort.by(Sort.Order.desc("seq"))).limit(1);
+        ExePlanLog latestTerminal = mongoTemplate.findOne(latestTerminalQuery, ExePlanLog.class, "exePlanLog");
+        if (latestTerminal == null) {
+            return false;
+        }
+
+        int targetState = "PLAN_DONE".equals(latestTerminal.getStage())
+                ? Constant.NORMAL_TERMINATION
+                : Constant.ABNORMAL_TERMINATION;
+        long ts = latestTerminal.getTs() > 0 ? latestTerminal.getTs() : System.currentTimeMillis();
+        Query updateQuery = new Query(new Criteria().andOperator(
+                buildIdCriteria(planId),
+                Criteria.where("exeState").is(Constant.IN_EXECUTION)
+        ));
+        Update update = new Update()
+                .set("exeState", targetState)
+                .set("exeEndTime", ts);
+        if (targetState == Constant.NORMAL_TERMINATION) {
+            update.set("lastError", null);
+        } else if (!StringUtils.hasText(plan.getLastError())) {
+            update.set("lastError", "执行失败（状态由日志兜底修复）");
+        }
+        ExePlan repaired = mongoTemplate.findAndModify(updateQuery, update, FindAndModifyOptions.options().returnNew(true),
+                ExePlan.class, "exePlanMgr");
+        return repaired != null;
+    }
+
     private Criteria buildIdCriteria(String planId) {
         if (!StringUtils.hasText(planId)) {
             return Criteria.where("_id").is(planId);
@@ -310,6 +407,20 @@ public class ExePlanMgrDao {
         }
         Query query = new Query(Criteria.where(fieldName).is(value));
         return mongoTemplate.findOne(query, ExePlan.class, "exePlanMgr");
+    }
+
+    private Update buildExePlanUpdate(ExePlan exeplan) {
+        return new Update()
+                .set("planName", exeplan.getPlanName())
+                .set("probInstIds", exeplan.getProbInstIds())
+                .set("algRunInfos", exeplan.getAlgRunInfos())
+                .set("userIds", exeplan.getUserIds())
+                .set("description", exeplan.getDescription())
+                .set("exeStartTime", exeplan.getExeStartTime())
+                .set("exeEndTime", exeplan.getExeEndTime())
+                .set("exeState", exeplan.getExeState())
+                .set("lastError", exeplan.getLastError())
+                .set("executionId", exeplan.getExecutionId());
     }
 
     private long deleteByRawField(String fieldName, Object value) {

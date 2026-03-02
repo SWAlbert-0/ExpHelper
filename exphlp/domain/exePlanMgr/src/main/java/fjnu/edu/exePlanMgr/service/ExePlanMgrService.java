@@ -16,6 +16,9 @@ public interface ExePlanMgrService {
 
     public List<ExePlan> getExePlans(int pageNum, int pageSize);
 
+    public List<ExePlan> getExePlans(int pageNum, int pageSize, String scope);
+    public List<ExePlan> getExePlans(int pageNum, int pageSize, String scope, String planName, Integer exeState, Long exeStartTime, Long exeEndTime);
+
     public String addExePlan(ExePlan exeplan) throws Exception;
 
     public ExePlan getExePlanByName(String planName);
@@ -27,6 +30,9 @@ public interface ExePlanMgrService {
     public boolean updateExePlanById(ExePlan exeplan);
 
     public long countAllExePlans();
+
+    public long countAllExePlans(String scope);
+    public long countAllExePlans(String scope, String planName, Integer exeState, Long exeStartTime, Long exeEndTime);
 
     public long countPlansByProbInstId(String probInstId);
 
@@ -43,5 +49,7 @@ public interface ExePlanMgrService {
     public long getLatestPlanLogSeq(String planId, String executionId);
 
     public List<ExePlanLog> listPlanLogs(String planId, String executionId, int limit);
+
+    public boolean repairExecutionStateFromLogs(String planId, String executionId);
 
 }

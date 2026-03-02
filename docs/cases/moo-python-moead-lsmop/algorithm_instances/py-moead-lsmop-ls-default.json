@@ -1,0 +1,13 @@
+﻿{
+  "algName": "py-moead-lsmop-ls",
+  "serviceName": "py-moead-lsmop-ls",
+  "runtimeType": "python",
+  "description": "Python FastAPI MOEA/D style baseline for LSMOP",
+  "defParas": [
+    { "paraName": "nVars", "paraType": "int", "paraValue": "500", "description": "决策变量维度" },
+    { "paraName": "populationSize", "paraType": "int", "paraValue": "150", "description": "种群规模" },
+    { "paraName": "maxGenerations", "paraType": "int", "paraValue": "220", "description": "最大迭代代数" },
+    { "paraName": "maxReturnedPoints", "paraType": "int", "paraValue": "90", "description": "返回 Pareto 点数量" },
+    { "paraName": "seed", "paraType": "long", "paraValue": "20260302", "description": "随机种子" }
+  ]
+}

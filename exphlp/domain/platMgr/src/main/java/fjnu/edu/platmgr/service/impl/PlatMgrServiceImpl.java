@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class PlatMgrServiceImpl implements PlatMgrService {
@@ -136,6 +137,15 @@ public class PlatMgrServiceImpl implements PlatMgrService {
             return userDao.countByUserName(userName);
         } catch (Exception e) {
             throw new BusinessException("获取用户数量失败");
+        }
+    }
+
+    @Override
+    public Map<String, Object> repairInvalidUserIds() {
+        try {
+            return userDao.repairInvalidUserIds();
+        } catch (Exception e) {
+            throw new BusinessException("修复用户ID失败");
         }
     }
 }

@@ -94,14 +94,14 @@ public class PlanExecuteImpl implements PlanExecuteService {
         }
         String executionId = newExecutionId();
         exePlan.setExecutionId(executionId);
-        exePlanMgrDao.updateExePlanById(exePlan);
+        exePlanMgrDao.updateExePlanExecutionById(exePlan);
         PlanPreCheckResult preCheckResult = preCheckPlanReachability(exePlan, true);
         if (preCheckResult == null || !preCheckResult.isPass()) {
             String preCheckError = preCheckResult == null ? "执行前检查失败" : preCheckResult.getMessage();
             markFailed(exePlan, preCheckError);
             exePlan.setExeStartTime(System.currentTimeMillis());
             exePlan.setExeEndTime(System.currentTimeMillis());
-            exePlanMgrDao.updateExePlanById(exePlan);
+            exePlanMgrDao.updateExePlanExecutionById(exePlan);
             appendPlanLog(planId, executionId, "ERROR", "PLAN_FAIL", preCheckError, null, null, null, null);
             runningPlans.remove(planId);
             return false;
@@ -110,8 +110,9 @@ public class PlanExecuteImpl implements PlanExecuteService {
         exePlan.setExeStartTime(System.currentTimeMillis());
         exePlan.setExeEndTime(0L);
         exePlan.setLastError(null);
-        exePlanMgrDao.updateExePlanById(exePlan);
+        exePlanMgrDao.updateExePlanExecutionById(exePlan);
         appendPlanLog(planId, executionId, "INFO", "PLAN_START", "计划开始执行", null, null, null, null);
+        notificationService.enqueuePlanProgressNotifications(exePlan, "计划已进入执行阶段");
 
         try {
             planExecutor.execute(() -> runPlan(planId));
@@ -120,7 +121,7 @@ public class PlanExecuteImpl implements PlanExecuteService {
             markFailed(exePlan, "执行任务队列已满");
             appendPlanLog(planId, executionId, "ERROR", "PLAN_FAIL", "执行任务队列已满", null, null, null, null);
             exePlan.setExeEndTime(System.currentTimeMillis());
-            exePlanMgrDao.updateExePlanById(exePlan);
+            exePlanMgrDao.updateExePlanExecutionById(exePlan);
             runningPlans.remove(planId);
             return false;
         }
@@ -164,9 +165,12 @@ public class PlanExecuteImpl implements PlanExecuteService {
 
                 for (int time = 0; time < runNum; time++) {
                     for (ProbInst probInst : probInsts) {
+                        String probDetails = "machineName=" + safe(probInst.getMachineName())
+                                + ";machineIp=" + safe(probInst.getMachineIp())
+                                + ";dirName=" + safe(probInst.getDirName());
                         appendPlanLog(planId, executionId, "INFO", "ALG_CALL",
                                 "调用算法，run=" + (time + 1) + "，问题实例=" + probInst.getInstName(),
-                                algId, time + 1, probInst.getInstId(), null);
+                                algId, time + 1, probInst.getInstId(), probDetails);
                         AlgRunCtx algRunCtx = buildAlgRunCtx(planId, algId, probInst, runParas, time + 1);
                         HttpEntity<AlgRunCtx> request = new HttpEntity<>(algRunCtx);
                         List<EachResult> eachResults = invokeAlgWithRetry(planId, executionId, algId, time + 1, probInst.getInstId(), serverURL, request);
@@ -207,6 +211,7 @@ public class PlanExecuteImpl implements PlanExecuteService {
             appendPlanLog(planId, exePlan.getExecutionId(), "ERROR", "PLAN_FAIL",
                     "计划执行失败: " + extractErrorMessage(ex), null, null, null,
                     ex.getClass().getSimpleName());
+            notificationService.enqueuePlanExceptionNotifications(exePlan, extractErrorMessage(ex));
             Map<String, ExeResultDetail> resultDetails = collectResultDetails(exePlan);
             appendPlanLog(planId, exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
                     "准备通知邮件指标快照",
@@ -216,7 +221,7 @@ public class PlanExecuteImpl implements PlanExecuteService {
             return;
         } finally {
             exePlan.setExeEndTime(System.currentTimeMillis());
-            exePlanMgrDao.updateExePlanById(exePlan);
+            exePlanMgrDao.updateExePlanExecutionById(exePlan);
             runningPlans.remove(planId);
         }
     }
@@ -377,6 +382,10 @@ public class PlanExecuteImpl implements PlanExecuteService {
         }
         sb.append("]");
         return sb.toString();
+    }
+
+    private String safe(String text) {
+        return text == null ? "" : text.trim();
     }
 
     private void appendPlanLog(String planId, String executionId, String level, String stage, String message,

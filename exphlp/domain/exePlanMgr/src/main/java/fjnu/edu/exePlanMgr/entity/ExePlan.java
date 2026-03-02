@@ -16,6 +16,8 @@ public class ExePlan {
     @Id
     private String planId;//MongoDB自动生成的Id
     private String planName;//计划名
+    private String ownerUserId;//计划创建者Id
+    private String ownerUserName;//计划创建者用户名
     private List<String> probInstIds;//问题实例Id
     private List<AlgRunInfo> algRunInfos;
     private List<String> userIds;//需要通知的用户的Id

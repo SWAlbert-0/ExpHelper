@@ -2,20 +2,19 @@
   <div class="app-container">
     <el-alert
       class="page-tip"
-      title="平台管理：维护用户基础信息，可用于执行计划通知。建议先查询后编辑，避免误操作。"
+      :title="isAdmin ? '平台管理：管理员可维护全部账号，普通用户可查看并维护个人资料。' : '平台管理：可查看全部账号；仅可编辑与重置自己的账号信息。'"
       type="info"
       :closable="false"
       show-icon
     />
-    <div class="toolbar">
+    <div class="toolbar-row">
       <div class="toolbar-left">
-        <el-button type="success" icon="el-icon-plus" @click="addForm()">添加</el-button>
-        <el-button type="danger" icon="el-icon-delete" @click="deleteBatch()">批量删除</el-button>
+        <el-button v-if="isAdmin" type="success" icon="el-icon-plus" @click="addForm()">添加</el-button>
+        <el-button v-if="isAdmin" type="danger" icon="el-icon-delete" @click="deleteBatch()">批量删除</el-button>
+        <el-button type="default" icon="el-icon-document" @click="openManualDialog">查看操作手册</el-button>
       </div>
       <el-form :inline="true" class="toolbar-right">
-        <el-form-item>
-          <el-input v-model="userName" placeholder="请输入姓名" clearable />
-        </el-form-item>
+        <el-input v-model="userName" placeholder="请输入姓名" clearable class="toolbar-search-input" />
         <el-button type="primary" icon="el-icon-search" @click="pageHelper.currentPageNum = 1, getUserByRegexName()">查询</el-button>
         <el-button type="default" icon="el-icon-refresh" @click="back()">刷新</el-button>
       </el-form>
@@ -40,9 +39,9 @@
       <el-table-column label="操作" align="center" width="320">
         <template slot-scope="scope">
           <div class="op-buttons">
-            <el-button type="primary" size="mini" icon="el-icon-edit" @click="updateForm(scope.row)">编辑</el-button>
-            <el-button type="warning" size="mini" icon="el-icon-key" @click="resetPassword(scope.row)">重置密码</el-button>
-            <el-button type="danger" size="mini" icon="el-icon-delete" @click="deleteForm(scope.row.userId)">删除</el-button>
+            <el-button type="primary" size="mini" icon="el-icon-edit" :disabled="!canEditRow(scope.row)" @click="updateForm(scope.row)">编辑</el-button>
+            <el-button type="warning" size="mini" icon="el-icon-key" :disabled="!canResetRow(scope.row)" @click="resetPassword(scope.row)">重置密码</el-button>
+            <el-button v-if="isAdmin" type="danger" size="mini" icon="el-icon-delete" @click="deleteForm(scope.row.userId)">删除</el-button>
           </div>
         </template>
       </el-table-column>
@@ -91,6 +90,10 @@
         <el-button type="primary" :loading="submitLoading" @click="submit()">确 定</el-button>
       </div>
     </el-dialog>
+    <manual-doc-dialog
+      :visible.sync="manualDialogVisible"
+      :page-key="manualPageKey"
+    />
   </div>
 </template>
 
@@ -106,8 +109,23 @@ import {
   countUserByUserName,
   resetUserPassword
 } from "@/api/exphlp/platMgr";
+import ManualDocDialog from "@/components/ManualDocDialog";
+import { mapGetters } from "vuex";
 
 export default {
+  components: { ManualDocDialog },
+  computed: {
+    ...mapGetters([
+      "roles",
+      "name"
+    ]),
+    isAdmin() {
+      return Array.isArray(this.roles) && this.roles.includes("ROLE_ADMIN");
+    },
+    currentUserName() {
+      return (this.name || "").toString().trim();
+    }
+  },
 
   data() {
     return {
@@ -157,7 +175,9 @@ export default {
             trigger: "blur"
           }
         ]
-      }
+      },
+      manualDialogVisible: false,
+      manualPageKey: "platform"
     };
   },
   created() {
@@ -165,6 +185,22 @@ export default {
     this.countAllUsers();
   },
   methods: {
+    canEditRow(row) {
+      return this.isAdmin || this.isSelfRow(row);
+    },
+    canResetRow(row) {
+      return this.isAdmin || this.isSelfRow(row);
+    },
+    isSelfRow(row) {
+      if (!row || !row.userName) {
+        return false;
+      }
+      return row.userName === this.currentUserName;
+    },
+    openManualDialog() {
+      this.manualPageKey = "platform";
+      this.manualDialogVisible = true;
+    },
     listUsers() {
       this.tableLoading = true;
       getUserList(this.pageHelper.currentPageNum, this.pageHelper.pageSize).then(res => {
@@ -199,6 +235,10 @@ export default {
       this.multipleSelection = val;
     },
     addForm() {
+      if (!this.isAdmin) {
+        this.$message({ type: "warning", message: "仅管理员可新增用户" });
+        return;
+      }
       this.form = {
         userId: "",
         userName: "",
@@ -218,12 +258,22 @@ export default {
       this.title = "查看";
     },
     updateForm(row) {
-      this.form = row;
+      if (!this.canEditRow(row)) {
+        this.$message({ type: "warning", message: "仅可编辑自己的账号信息" });
+        return;
+      }
+      this.form = Object.assign({}, row, {
+        _originUserName: row && row.userName ? row.userName : ""
+      });
       this.dialogVisible = true;
       this.canEdit = true;
       this.title = "编辑";
     },
     deleteForm(userId) {
+      if (!this.isAdmin) {
+        this.$message({ type: "warning", message: "仅管理员可删除用户" });
+        return;
+      }
       this.$confirm("此操作将永久删除用户, 是否继续?", "提示", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
@@ -240,6 +290,10 @@ export default {
         });
     },
     deleteBatch() {
+      if (!this.isAdmin) {
+        this.$message({ type: "warning", message: "仅管理员可批量删除用户" });
+        return;
+      }
       if (this.multipleSelection.length == 0) {
         this.$message({
           type: "warning",
@@ -279,13 +333,21 @@ export default {
         }
         if (this.title == "编辑") {
           this.submitLoading = true;
-          updateUserById(this.form).then(() => {
+          const payload = Object.assign({}, this.form);
+          const commitUpdate = (nextPayload) => updateUserById(nextPayload).then(() => {
             this.$message({ type: "success", message: "修改成功!" });
+            this.dialogVisible = false;
             this.listUsers();
+          });
+          payload.userName = (payload.userName || "").trim();
+          if (!payload.userName && payload._originUserName) {
+            payload.userName = payload._originUserName;
+          }
+          commitUpdate(payload).catch((error) => {
+            this.$message({ type: "error", message: (error && error.message) || "修改失败" });
           }).finally(() => {
             this.submitLoading = false;
           });
-          this.dialogVisible = false;
           return;
         }
         if (this.title == "添加") {
@@ -310,6 +372,10 @@ export default {
       });
     },
     resetPassword(row) {
+      if (!this.canResetRow(row)) {
+        this.$message({ type: "warning", message: "仅可重置自己的密码" });
+        return;
+      }
       this.$prompt(`请输入用户 ${row.userName} 的新密码`, "重置密码", {
         confirmButtonText: "确定",
         cancelButtonText: "取消",
@@ -317,7 +383,7 @@ export default {
         inputPattern: /^.{6,50}$/,
         inputErrorMessage: "密码长度需在6到50之间"
       }).then(({ value }) => {
-        return resetUserPassword(row.userId, value);
+        return resetUserPassword(row.userId, value, row.userName);
       }).then(() => {
         this.$message({ type: "success", message: "密码已重置" });
       }).catch(() => {});
@@ -365,7 +431,7 @@ export default {
   margin-bottom: 12px;
 }
 
-.toolbar {
+.toolbar-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -386,11 +452,7 @@ export default {
   margin-left: auto;
 }
 
-.toolbar-right /deep/ .el-form-item {
-  margin-bottom: 0;
-}
-
-.toolbar-right /deep/ .el-input {
+.toolbar-search-input {
   width: 300px;
 }
 
@@ -415,7 +477,7 @@ export default {
 }
 
 @media (max-width: 1200px) {
-  .toolbar {
+  .toolbar-row {
     flex-wrap: wrap;
   }
 

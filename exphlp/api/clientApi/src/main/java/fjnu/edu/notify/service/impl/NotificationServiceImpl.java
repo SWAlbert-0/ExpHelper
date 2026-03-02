@@ -57,6 +57,10 @@ public class NotificationServiceImpl implements NotificationService {
     private int retryMax;
     @org.springframework.beans.factory.annotation.Value("${notify.retention.days:90}")
     private int retentionDays;
+    @org.springframework.beans.factory.annotation.Value("${notify.mail.enabled:true}")
+    private boolean mailEnabled;
+    @org.springframework.beans.factory.annotation.Value("${notify.wechat.enabled:false}")
+    private boolean wechatEnabled;
 
     @PostConstruct
     public void initIndexes() {
@@ -123,6 +127,15 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public int enqueuePlanDoneNotifications(ExePlan exePlan, boolean success, Map<String, ExeResultDetail> resultDetailsByAlgId) {
         if (exePlan == null || !StringUtils.hasText(exePlan.getPlanId())) {
+            return 0;
+        }
+        if (!mailEnabled) {
+            appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
+                    "邮件通知通道已关闭，跳过通知任务创建", "reasonCode=MAIL_CHANNEL_DISABLED");
+            if (wechatEnabled) {
+                appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "INFO", "WECHAT_NOTIFY",
+                        "微信通知为扩展预留，当前版本未启用实际发送", "reasonCode=WECHAT_NOT_IMPLEMENTED");
+            }
             return 0;
         }
         List<String> userIds = exePlan.getUserIds();
@@ -211,6 +224,22 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
+    public int enqueuePlanProgressNotifications(ExePlan exePlan, String progressMessage) {
+        return enqueueSimpleEventNotifications(exePlan, NotificationConstants.EVENT_PLAN_PROGRESS,
+                "执行计划进度: " + safe(exePlan == null ? null : exePlan.getPlanName()),
+                "计划[" + safe(exePlan == null ? null : exePlan.getPlanName()) + "]进度更新: " + safe(progressMessage),
+                "PLAN_PROGRESS_EVENT_CREATED");
+    }
+
+    @Override
+    public int enqueuePlanExceptionNotifications(ExePlan exePlan, String errorMessage) {
+        return enqueueSimpleEventNotifications(exePlan, NotificationConstants.EVENT_PLAN_EXCEPTION,
+                "执行计划异常: " + safe(exePlan == null ? null : exePlan.getPlanName()),
+                "计划[" + safe(exePlan == null ? null : exePlan.getPlanName()) + "]发生异常: " + safe(errorMessage),
+                "PLAN_EXCEPTION_EVENT_CREATED");
+    }
+
+    @Override
     public List<NotificationOutbox> listOutbox(String planId, String executionId, String userId, String status,
                                                long fromTs, long toTs, int pageNum, int pageSize) {
         return notificationDao.listOutbox(planId, executionId, userId, status, fromTs, toTs, pageNum, pageSize);
@@ -277,6 +306,9 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public MailSendResult sendProfileTestMail(String userId, String fallbackEmail, String userName) {
+        if (!mailEnabled) {
+            return MailSendResult.configInvalid("邮件通道未启用，请设置 notify.mail.enabled=true");
+        }
         if (!StringUtils.hasText(userId)) {
             return MailSendResult.receiverInvalid("用户未登录");
         }
@@ -297,7 +329,24 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     private void dispatchSingle(NotificationOutbox task) {
+        if (task == null) {
+            return;
+        }
         long now = System.currentTimeMillis();
+        if (!NotificationConstants.CHANNEL_MAIL.equalsIgnoreCase(safe(task.getChannel()))) {
+            notificationDao.markFinalFailed(task.getNotificationId(), Math.max(1, task.getRetryCount()), "NOTIFY_CHANNEL_UNSUPPORTED",
+                    "暂不支持的通知通道: " + safe(task.getChannel()), now);
+            appendPlanLog(task.getPlanId(), task.getExecutionId(), "WARN", "MAIL_NOTIFY",
+                    "通知发送失败: 暂不支持的通道", "reasonCode=NOTIFY_CHANNEL_UNSUPPORTED;channel=" + safe(task.getChannel()));
+            return;
+        }
+        if (!mailEnabled) {
+            notificationDao.markFinalFailed(task.getNotificationId(), Math.max(1, task.getRetryCount()), "MAIL_CHANNEL_DISABLED",
+                    "邮件通道已关闭", now);
+            appendPlanLog(task.getPlanId(), task.getExecutionId(), "INFO", "MAIL_NOTIFY",
+                    "邮件通知通道已关闭，任务终止", "reasonCode=MAIL_CHANNEL_DISABLED");
+            return;
+        }
         String reasonCode = "";
         String reasonMsg = "";
         try {
@@ -399,6 +448,73 @@ public class NotificationServiceImpl implements NotificationService {
 
     private String buildSubject(ExePlan exePlan) {
         return "执行计划通知: " + exePlan.getPlanName();
+    }
+
+    private int enqueueSimpleEventNotifications(ExePlan exePlan, String eventType, String subject, String textContent, String reasonCode) {
+        if (exePlan == null || !StringUtils.hasText(exePlan.getPlanId())) {
+            return 0;
+        }
+        if (!mailEnabled) {
+            appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
+                    "邮件通知通道已关闭，跳过事件通知", "reasonCode=MAIL_CHANNEL_DISABLED;eventType=" + safe(eventType));
+            return 0;
+        }
+        List<String> userIds = exePlan.getUserIds();
+        if (userIds == null || userIds.isEmpty()) {
+            return 0;
+        }
+        int created = 0;
+        long now = System.currentTimeMillis();
+        for (String userId : userIds) {
+            if (!StringUtils.hasText(userId)) {
+                continue;
+            }
+            UserInfo user = platMgrService.getUserById(userId);
+            if (user == null) {
+                continue;
+            }
+            UserNotifyProfile profile = getProfile(userId, user.getEmail());
+            if (profile == null || Boolean.FALSE.equals(profile.getEmailEnabled())) {
+                continue;
+            }
+            String targetEmail = profileEmail(profile, user.getEmail());
+            if (!StringUtils.hasText(targetEmail)) {
+                continue;
+            }
+            String bizKey = buildBizKey(exePlan.getPlanId(), exePlan.getExecutionId(), userId, eventType);
+            if (notificationDao.findByBizKey(bizKey) != null) {
+                continue;
+            }
+            NotificationOutbox task = new NotificationOutbox();
+            task.setBizKey(bizKey);
+            task.setPlanId(exePlan.getPlanId());
+            task.setExecutionId(exePlan.getExecutionId());
+            task.setUserId(userId);
+            task.setChannel(NotificationConstants.CHANNEL_MAIL);
+            task.setEventType(eventType);
+            task.setStatus(NotificationConstants.STATUS_PENDING);
+            task.setSource(NotificationConstants.SOURCE_AUTO);
+            task.setToEmail(targetEmail.trim());
+            task.setSubject(subject);
+            String timezone = resolveTimezone(profile);
+            task.setContent(textContent + "\n时间=" + formatEpochMillis(now, timezone) + "\n请登录系统查看详情。");
+            task.setContentHtml("");
+            task.setContentMode(NotificationConstants.CONTENT_MODE_TEXT_ONLY);
+            task.setRenderedAt(now);
+            task.setRenderedAtText(formatEpochMillis(now, timezone));
+            task.setRetryCount(0);
+            task.setLastErrorCode("");
+            task.setLastErrorMsg("");
+            task.setCreatedAt(now);
+            task.setUpdatedAt(now);
+            task.setNextRetryAt(computeNextRetryAtWithQuietHours(profile, now));
+            notificationDao.insertOutbox(task);
+            created++;
+        }
+        appendPlanLog(exePlan.getPlanId(), exePlan.getExecutionId(), "INFO", "MAIL_NOTIFY",
+                "事件通知任务入队完成，已创建任务数=" + created,
+                "reasonCode=" + safe(reasonCode) + ";eventType=" + safe(eventType));
+        return created;
     }
 
     private String buildTextContent(ExePlan exePlan, boolean success, Map<String, ExeResultDetail> resultDetailsByAlgId,

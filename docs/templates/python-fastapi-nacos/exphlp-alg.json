@@ -1,0 +1,5 @@
+﻿{
+  "runtimeType": "python",
+  "port": 18083,
+  "entry": "main:app"
+}

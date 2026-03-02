@@ -1,0 +1,13 @@
+﻿{
+  "algName": "py-nsga2-zdt1-ls",
+  "serviceName": "py-nsga2-zdt1-ls",
+  "runtimeType": "python",
+  "description": "Python FastAPI NSGA-II style baseline for ZDT1",
+  "defParas": [
+    { "paraName": "nVars", "paraType": "int", "paraValue": "100", "description": "决策变量维度" },
+    { "paraName": "populationSize", "paraType": "int", "paraValue": "120", "description": "种群规模" },
+    { "paraName": "maxGenerations", "paraType": "int", "paraValue": "180", "description": "最大迭代代数" },
+    { "paraName": "maxReturnedPoints", "paraType": "int", "paraValue": "80", "description": "返回 Pareto 点数量" },
+    { "paraName": "seed", "paraType": "long", "paraValue": "20260301", "description": "随机种子" }
+  ]
+}

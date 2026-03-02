@@ -225,6 +225,9 @@ export default {
           });
         }
 
+        const selectedProb = (this.probInsts || []).find((item) => item.instId === this.selectedProbId);
+        this.addCheck(this.evaluateProblemContext(selectedProb));
+
         if (precheckR.status === "fulfilled") {
           const data = (precheckR.value && precheckR.value.data) || {};
           const pass = data.pass === true;
@@ -281,6 +284,54 @@ export default {
         this.onClose();
         this.$router.push(path);
       }
+    },
+    evaluateProblemContext(probInst) {
+      if (!probInst) {
+        return {
+          name: "问题实例环境信息",
+          status: "WARN",
+          message: "未选择问题实例，无法检查 machineName/IP/dirName",
+          suggestion: "建议先选择具体问题实例后再执行体检",
+          action: "",
+        };
+      }
+      const machineName = (probInst.machineName || "").toString().trim();
+      const machineIp = (probInst.machineIp || "").toString().trim();
+      const dirName = (probInst.dirName || "").toString().trim();
+      const nameOk = machineName.length > 0;
+      const ipOk = this.isMachineIpLike(machineIp);
+      const dirOk = dirName.length > 0;
+      if (nameOk && ipOk && dirOk) {
+        return {
+          name: "问题实例环境信息",
+          status: "PASS",
+          message: `machineName=${machineName}, machineIp=${machineIp}, dirName=${dirName}`,
+          suggestion: "该信息将作为实验环境上下文写入执行链路（非调度路由）",
+          action: "",
+        };
+      }
+      const missing = [];
+      if (!nameOk) missing.push("machineName");
+      if (!ipOk) missing.push("machineIp");
+      if (!dirOk) missing.push("dirName");
+      return {
+        name: "问题实例环境信息",
+        status: "WARN",
+        message: `字段不完整或格式异常：${missing.join("、")}`,
+        suggestion: "请在问题实例管理中补齐机器名称/IP/目录。该信息用于实验追溯，不会阻断执行",
+        action: "",
+      };
+    },
+    isMachineIpLike(value) {
+      if (!value) {
+        return false;
+      }
+      const text = value.toLowerCase();
+      if (text === "localhost" || text === "127.0.0.1") {
+        return true;
+      }
+      const ipv4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+      return ipv4.test(value);
     },
   },
 };

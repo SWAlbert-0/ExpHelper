@@ -1,6 +1,7 @@
 package fjnu.edu.controller;
 
 import fjnu.edu.auth.ApiResponse;
+import fjnu.edu.auth.AuthUser;
 import fjnu.edu.auth.ErrorCode;
 import fjnu.edu.auth.TraceContext;
 import fjnu.edu.alglibmgr.entity.AlgInfo;
@@ -12,8 +13,12 @@ import fjnu.edu.exePlanMgr.entity.PlanPreCheckItem;
 import fjnu.edu.exePlanMgr.entity.PlanPreCheckResult;
 import fjnu.edu.exePlanMgr.service.ExePlanMgrService;
 import fjnu.edu.intf.PlanExecuteService;
+import fjnu.edu.platmgr.entity.UserInfo;
+import fjnu.edu.platmgr.service.PlatMgrService;
 import fjnu.edu.probInstMgr.entity.ProbInst;
 import fjnu.edu.probInstMgr.service.ProbInstMgrService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +28,13 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -50,19 +62,67 @@ public class ExePlanMgrCtrl {
 
     @Autowired
     DiscoveryClient discoveryClient;
+    @Autowired
+    PlatMgrService platMgrService;
+    @Autowired
+    ObjectMapper objectMapper;
+
+    @org.springframework.beans.factory.annotation.Value("${spring.cloud.nacos.discovery.server-addr:localhost:8848}")
+    private String nacosServerAddr;
 
     @GetMapping("/getExePlans")
     public List<ExePlan> getExePlans(@RequestParam int pageNum,
-                                     @RequestParam int pageSize){
-        List<ExePlan> plans = exePlanMgrService.getExePlans(normalizePageNum(pageNum), normalizePageSize(pageSize));
-        return plans == null ? Collections.emptyList() : plans;
+                                     @RequestParam int pageSize,
+                                     @RequestParam(required = false) String scope,
+                                     @RequestParam(required = false) String planName,
+                                     @RequestParam(required = false) Integer exeState,
+                                     @RequestParam(required = false) Long exeStartTime,
+                                     @RequestParam(required = false) Long exeEndTime){
+        List<ExePlan> plans = exePlanMgrService.getExePlans(
+                normalizePageNum(pageNum),
+                normalizePageSize(pageSize),
+                scope,
+                planName,
+                exeState,
+                exeStartTime,
+                exeEndTime
+        );
+        if (plans == null || plans.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ExePlan> normalized = new ArrayList<>(plans.size());
+        for (ExePlan plan : plans) {
+            if (plan == null) {
+                continue;
+            }
+            if (plan.getExeState() == fjnu.edu.exePlanMgr.Constant.Constant.IN_EXECUTION) {
+                boolean repaired = exePlanMgrService.repairExecutionStateFromLogs(plan.getPlanId(), plan.getExecutionId());
+                if (repaired) {
+                    ExePlan latest = exePlanMgrService.getExePlanById(plan.getPlanId());
+                    normalized.add(latest == null ? plan : latest);
+                    continue;
+                }
+            }
+            normalized.add(plan);
+        }
+        return normalized;
 
     }
 
     @PostMapping("/addExePlan")
-    public String addExePlan(@RequestBody ExePlan exeplan) throws Exception {
+    public String addExePlan(@RequestBody ExePlan exeplan, HttpServletRequest request) throws Exception {
         if (exeplan == null || !StringUtils.hasText(exeplan.getPlanName())) {
             throw new IllegalArgumentException("计划名称不能为空");
+        }
+        AuthUser auth = currentAuth(request);
+        if (auth != null) {
+            String ownerId = resolveAuthUserId(auth);
+            if (StringUtils.hasText(ownerId)) {
+                exeplan.setOwnerUserId(ownerId);
+            }
+            if (StringUtils.hasText(auth.getUserName())) {
+                exeplan.setOwnerUserName(auth.getUserName().trim());
+            }
         }
         return exePlanMgrService.addExePlan(exeplan);
     }
@@ -79,6 +139,11 @@ public class ExePlanMgrCtrl {
     public Map<String, Object> deleteExePlanById(@RequestParam String planId, HttpServletRequest request){
         if (!StringUtils.hasText(planId)) {
             return ApiResponse.failed(request, 400, "planId不能为空", ErrorCode.PLAN_ID_EMPTY.code());
+        }
+        ExePlan current = exePlanMgrService.getExePlanById(planId);
+        AuthUser auth = currentAuth(request);
+        if (!canManagePlan(auth, current)) {
+            return ApiResponse.failed(request, 403, "仅计划创建者或管理员可删除", ErrorCode.AUTH_FORBIDDEN.code());
         }
         ExePlanDeleteResult deleteResult = exePlanMgrService.deleteExePlanById(planId);
         long deletedCount = deleteResult == null ? 0L : deleteResult.getDeletedCount();
@@ -100,16 +165,56 @@ public class ExePlanMgrCtrl {
     }
 
     @PostMapping("updateExePlanById")
-    public boolean updateExePlanById(@RequestBody ExePlan exeplan){
+    public Map<String, Object> updateExePlanById(@RequestBody ExePlan exeplan, HttpServletRequest request){
         if (exeplan == null || !StringUtils.hasText(exeplan.getPlanId())) {
-            return false;
+            return ApiResponse.failed(request, 400, "planId不能为空", ErrorCode.PLAN_ID_EMPTY.code());
         }
-        return exePlanMgrService.updateExePlanById(exeplan);
+        ExePlan current = exePlanMgrService.getExePlanById(exeplan.getPlanId());
+        AuthUser auth = currentAuth(request);
+        if (!canManagePlan(auth, current)) {
+            return ApiResponse.failed(request, 403, "仅计划创建者或管理员可编辑", ErrorCode.AUTH_FORBIDDEN.code());
+        }
+        if (current != null) {
+            // 避免更新时覆盖owner归属，保持“创建者可编辑、他人只读”的权限模型。
+            exeplan.setOwnerUserId(current.getOwnerUserId());
+            exeplan.setOwnerUserName(current.getOwnerUserName());
+        }
+        boolean ok = exePlanMgrService.updateExePlanById(exeplan);
+        if (!ok) {
+            return ApiResponse.failed(request, 500, "更新失败", ErrorCode.INTERNAL_ERROR.code());
+        }
+        return ApiResponse.ok(request, null, "更新成功");
+    }
+
+    @PostMapping("/updateExePlanByIdWithAuth")
+    public Map<String, Object> updateExePlanByIdWithAuth(@RequestBody ExePlan exeplan, HttpServletRequest request){
+        if (exeplan == null || !StringUtils.hasText(exeplan.getPlanId())) {
+            return ApiResponse.failed(request, 400, "planId不能为空", ErrorCode.PLAN_ID_EMPTY.code());
+        }
+        ExePlan current = exePlanMgrService.getExePlanById(exeplan.getPlanId());
+        AuthUser auth = currentAuth(request);
+        if (!canManagePlan(auth, current)) {
+            return ApiResponse.failed(request, 403, "仅计划创建者或管理员可编辑", ErrorCode.AUTH_FORBIDDEN.code());
+        }
+        if (current != null) {
+            // 防止非预期覆盖创建者归属
+            exeplan.setOwnerUserId(current.getOwnerUserId());
+            exeplan.setOwnerUserName(current.getOwnerUserName());
+        }
+        boolean ok = exePlanMgrService.updateExePlanById(exeplan);
+        if (!ok) {
+            return ApiResponse.failed(request, 500, "更新失败", ErrorCode.INTERNAL_ERROR.code());
+        }
+        return ApiResponse.ok(request, null, "更新成功");
     }
 
     @GetMapping("/countAllExePlans")
-    public long countAllExePlans() {
-        long count = exePlanMgrService.countAllExePlans();
+    public long countAllExePlans(@RequestParam(required = false) String scope,
+                                 @RequestParam(required = false) String planName,
+                                 @RequestParam(required = false) Integer exeState,
+                                 @RequestParam(required = false) Long exeStartTime,
+                                 @RequestParam(required = false) Long exeEndTime) {
+        long count = exePlanMgrService.countAllExePlans(scope, planName, exeState, exeStartTime, exeEndTime);
         return  count;
     }
 
@@ -130,6 +235,10 @@ public class ExePlanMgrCtrl {
         if (exePlan == null) {
             log.warn("traceId={} path={} planId={} errorCode={}", traceId, "/api/ExePlanController/execute", planId, ErrorCode.PLAN_NOT_FOUND.code());
             return ApiResponse.failed(request, 404, "执行计划不存在", ErrorCode.PLAN_NOT_FOUND.code());
+        }
+        AuthUser auth = currentAuth(request);
+        if (!canManagePlan(auth, exePlan)) {
+            return ApiResponse.failed(request, 403, "仅计划创建者或管理员可执行", ErrorCode.AUTH_FORBIDDEN.code());
         }
         boolean accepted = planExecuteService.execute(planId);
         ExePlan latest = exePlanMgrService.getExePlanById(planId);
@@ -226,8 +335,14 @@ public class ExePlanMgrCtrl {
         item.setInstanceCount(availableCount);
         if (availableCount <= 0) {
             item.setErrorCode(ErrorCode.ALG_SERVICE_NO_INSTANCE.code());
-            item.setDiagnosis("服务[" + finalServiceName + "]在Nacos中没有可用实例");
-            item.setSuggestion("请先启动算法服务，再点击检查");
+            NacosInstanceStats stats = queryNacosInstanceStats(finalServiceName);
+            if (stats.totalCount > 0 && stats.healthyCount <= 0) {
+                item.setDiagnosis("服务[" + finalServiceName + "]存在实例，但全部不健康");
+                item.setSuggestion("请在算法库管理-源码弹窗中重新构建并启动算法服务，确保Nacos心跳正常上报");
+            } else {
+                item.setDiagnosis("服务[" + finalServiceName + "]在Nacos中没有可用实例");
+                item.setSuggestion("请先启动算法服务，再点击检查");
+            }
             items.add(item);
             return wizardFailed(request, "", ErrorCode.ALG_SERVICE_NO_INSTANCE.code(),
                     "执行前检查失败: 服务[" + finalServiceName + "]在Nacos中无可用实例", items);
@@ -238,6 +353,39 @@ public class ExePlanMgrCtrl {
         item.setDiagnosis("服务可达，可执行");
         item.setSuggestion("");
         items.add(item);
+
+        String runtimeType = normalizeRuntimeType(algInfo.getRuntimeType());
+        if ("python".equals(runtimeType)) {
+            PlanPreCheckItem apiItem = new PlanPreCheckItem();
+            apiItem.setAlgId(algId);
+            apiItem.setAlgName(algInfo.getAlgName());
+            apiItem.setServiceName(finalServiceName);
+            apiItem.setReachable(false);
+            apiItem.setInstanceCount(availableCount);
+            String endpoint = selectProbeEndpoint(instances);
+            if (!StringUtils.hasText(endpoint)) {
+                apiItem.setErrorCode(ErrorCode.ALG_ENDPOINT_UNREACHABLE.code());
+                apiItem.setDiagnosis("无法构建算法健康探测地址");
+                apiItem.setSuggestion("请确认算法服务实例在Nacos中包含可访问主机与端口");
+                items.add(apiItem);
+                return wizardFailed(request, "", ErrorCode.ALG_ENDPOINT_UNREACHABLE.code(),
+                        "执行前检查失败: 算法服务健康接口不可用", items);
+            }
+            String err = probeMyAlgEndpoint(endpoint);
+            if (StringUtils.hasText(err)) {
+                apiItem.setErrorCode(ErrorCode.ALG_ENDPOINT_UNREACHABLE.code());
+                apiItem.setDiagnosis("健康检查失败: " + err);
+                apiItem.setSuggestion("请确认算法服务提供 GET /myAlg/ 且返回 2xx");
+                items.add(apiItem);
+                return wizardFailed(request, "", ErrorCode.ALG_ENDPOINT_UNREACHABLE.code(),
+                        "执行前检查失败: 算法服务接口不可用", items);
+            }
+            apiItem.setReachable(true);
+            apiItem.setErrorCode("");
+            apiItem.setDiagnosis("健康接口可达: " + endpoint + "/myAlg/");
+            apiItem.setSuggestion("");
+            items.add(apiItem);
+        }
         PlanPreCheckResult result = PlanPreCheckResult.passed(items);
         return buildWizardResponse(request, "", result);
     }
@@ -332,6 +480,9 @@ public class ExePlanMgrCtrl {
         if (ErrorCode.ALG_SERVICE_NAME_EMPTY.code().equals(errorCode)) {
             return ErrorCode.ALG_SERVICE_NAME_EMPTY.code();
         }
+        if (ErrorCode.ALG_ENDPOINT_UNREACHABLE.code().equals(errorCode)) {
+            return ErrorCode.ALG_ENDPOINT_UNREACHABLE.code();
+        }
         if (ErrorCode.NACOS_UNREACHABLE.code().equals(errorCode)) {
             return ErrorCode.NACOS_UNREACHABLE.code();
         }
@@ -367,6 +518,106 @@ public class ExePlanMgrCtrl {
         return ApiResponse.ok(request, data, "执行前检查通过");
     }
 
+    private String normalizeRuntimeType(String runtimeType) {
+        if (!StringUtils.hasText(runtimeType)) {
+            return "java";
+        }
+        return "python".equalsIgnoreCase(runtimeType.trim()) ? "python" : "java";
+    }
+
+    private String selectProbeEndpoint(List<ServiceInstance> instances) {
+        if (instances == null || instances.isEmpty()) {
+            return "";
+        }
+        for (ServiceInstance instance : instances) {
+            if (instance == null) {
+                continue;
+            }
+            URI uri = instance.getUri();
+            if (uri != null && StringUtils.hasText(uri.toString())) {
+                String text = uri.toString();
+                return text.endsWith("/") ? text.substring(0, text.length() - 1) : text;
+            }
+            if (StringUtils.hasText(instance.getHost()) && instance.getPort() > 0) {
+                return "http://" + instance.getHost() + ":" + instance.getPort();
+            }
+        }
+        return "";
+    }
+
+    private String probeMyAlgEndpoint(String endpoint) {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(endpoint + "/myAlg/");
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(5000);
+            int code = conn.getResponseCode();
+            if (code >= 200 && code < 300) {
+                return "";
+            }
+            return "HTTP " + code;
+        } catch (Exception ex) {
+            return ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    private NacosInstanceStats queryNacosInstanceStats(String serviceName) {
+        NacosInstanceStats stats = new NacosInstanceStats();
+        if (!StringUtils.hasText(serviceName)) {
+            return stats;
+        }
+        HttpURLConnection conn = null;
+        try {
+            String addr = StringUtils.hasText(nacosServerAddr) ? nacosServerAddr.trim() : "localhost:8848";
+            if (!addr.startsWith("http://") && !addr.startsWith("https://")) {
+                addr = "http://" + addr;
+            }
+            String encodedService = URLEncoder.encode(serviceName, StandardCharsets.UTF_8);
+            String url = addr + "/nacos/v1/ns/instance/list?serviceName=" + encodedService + "&groupName=DEFAULT_GROUP&namespaceId=public";
+            conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+            if (conn.getResponseCode() != 200) {
+                return stats;
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                StringBuilder body = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    body.append(line);
+                }
+                ObjectMapper mapper = objectMapper == null ? new ObjectMapper() : objectMapper;
+                JsonNode root = mapper.readTree(body.toString());
+                JsonNode hosts = root.get("hosts");
+                if (hosts == null || !hosts.isArray()) {
+                    return stats;
+                }
+                for (JsonNode host : hosts) {
+                    stats.totalCount++;
+                    boolean healthy = host.path("healthy").asBoolean(false);
+                    boolean enabled = host.path("enabled").asBoolean(true);
+                    if (healthy && enabled) {
+                        stats.healthyCount++;
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            return stats;
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+        return stats;
+    }
+
     private String resolveExecutionId(String executionId, boolean latestOnly, ExePlan latestPlan) {
         if (StringUtils.hasText(executionId)) {
             return executionId.trim();
@@ -387,6 +638,53 @@ public class ExePlanMgrCtrl {
         data.put("verified", verified);
         data.put("blocked", blocked);
         return data;
+    }
+
+    private AuthUser currentAuth(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        Object authObj = request.getAttribute("authUser");
+        if (authObj instanceof AuthUser) {
+            return (AuthUser) authObj;
+        }
+        return null;
+    }
+
+    private String resolveAuthUserId(AuthUser auth) {
+        if (auth == null) {
+            return "";
+        }
+        if (StringUtils.hasText(auth.getUserId())) {
+            return auth.getUserId().trim();
+        }
+        if (StringUtils.hasText(auth.getUserName())) {
+            UserInfo user = platMgrService.getUserByName(auth.getUserName());
+            if (user != null && StringUtils.hasText(user.getUserId())) {
+                return user.getUserId().trim();
+            }
+        }
+        return "";
+    }
+
+    private boolean canManagePlan(AuthUser auth, ExePlan plan) {
+        if (auth == null) {
+            return false;
+        }
+        if (auth.getRole() != null && auth.getRole() == 1) {
+            return true;
+        }
+        if (plan == null || !StringUtils.hasText(plan.getOwnerUserId())) {
+            // 历史无owner计划：仅管理员可操作
+            return false;
+        }
+        String authUserId = resolveAuthUserId(auth);
+        return StringUtils.hasText(authUserId) && authUserId.equals(plan.getOwnerUserId());
+    }
+
+    private static final class NacosInstanceStats {
+        private int totalCount = 0;
+        private int healthyCount = 0;
     }
 
 }

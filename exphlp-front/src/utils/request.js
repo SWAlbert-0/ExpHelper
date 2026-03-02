@@ -59,6 +59,7 @@ service.interceptors.request.use(config => {
 // 响应拦截器
 service.interceptors.response.use(res => {
   const payload = res.data || {};
+  const requestUrl = res && res.config && res.config.url ? String(res.config.url) : "";
   // 未设置状态码则默认成功状态
   const code = payload.code || 200;
   const errorCodeKey = payload.errorCode;
@@ -66,6 +67,9 @@ service.interceptors.response.use(res => {
   const rawMsg = errorCode[errorCodeKey] || errorCode[code] || payload.msg || payload.message || errorCode["default"];
   const msg = payload.traceId ? `${rawMsg}（traceId: ${payload.traceId}）` : rawMsg;
   if (code === 401) {
+    if (requestUrl.includes("/api/auth/login") || requestUrl.includes("/api/auth/remember-login")) {
+      return Promise.reject(new Error(msg));
+    }
     if (!reloginPromptVisible) {
       reloginPromptVisible = true;
       MessageBox.confirm("登录状态已过期，您可以继续留在该页面，或者重新登录", "系统提示", {

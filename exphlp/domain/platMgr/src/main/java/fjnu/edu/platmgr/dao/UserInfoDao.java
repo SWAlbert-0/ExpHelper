@@ -2,6 +2,7 @@ package fjnu.edu.platmgr.dao;
 
 import fjnu.edu.platmgr.entity.UserInfo;
 import org.bson.types.ObjectId;
+import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Service
 public class UserInfoDao {
@@ -187,13 +190,42 @@ public class UserInfoDao {
 
     private Criteria buildIdCriteria(String id) {
         Criteria stringIdCriteria = Criteria.where("_id").is(id);
+        Criteria legacyUserIdCriteria = Criteria.where("userId").is(id);
         if (ObjectId.isValid(id)) {
             return new Criteria().orOperator(
                     stringIdCriteria,
+                    legacyUserIdCriteria,
                     Criteria.where("_id").is(new ObjectId(id))
             );
         }
-        return stringIdCriteria;
+        return new Criteria().orOperator(stringIdCriteria, legacyUserIdCriteria);
+    }
+
+    public Map<String, Object> repairInvalidUserIds() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        int scanned = 0;
+        int repaired = 0;
+        int failed = 0;
+        var collection = mongoTemplate.getCollection("userMgr");
+        var cursor = collection.find(new Document("_id", ""));
+        for (Document oldDoc : cursor) {
+            scanned++;
+            try {
+                Document newDoc = new Document(oldDoc);
+                newDoc.remove("_id");
+                ObjectId newId = new ObjectId();
+                newDoc.put("_id", newId);
+                collection.insertOne(newDoc);
+                collection.deleteOne(new Document("_id", ""));
+                repaired++;
+            } catch (Exception ex) {
+                failed++;
+            }
+        }
+        result.put("scanned", scanned);
+        result.put("repaired", repaired);
+        result.put("failed", failed);
+        return result;
     }
 
 }

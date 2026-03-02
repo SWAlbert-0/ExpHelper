@@ -2,6 +2,10 @@ import { deleteExePlanById } from "@/api/exphlp/exePlanMgr";
 
 export const planDeleteMethods = {
   deleteExePlan(scope) {
+    if (typeof this.canDeletePlan === "function" && !this.canDeletePlan(scope)) {
+      this.$message({ type: "warning", message: "当前账号仅可删除自己创建的计划" });
+      return;
+    }
     if (scope.exeState === "执行中") {
       this.$message({ type: "warning", message: "计划执行中，不能删除" });
       return;
@@ -40,7 +44,15 @@ export const planDeleteMethods = {
       });
       return;
     }
-    const hasRunningPlan = this.multipleSelection1.some((item) => item.exeState === "执行中");
+    let selected = this.multipleSelection1;
+    if (typeof this.canDeletePlan === "function") {
+      selected = this.multipleSelection1.filter((item) => this.canDeletePlan(item));
+      if (selected.length === 0) {
+        this.$message({ type: "warning", message: "仅可批量删除自己创建的计划" });
+        return;
+      }
+    }
+    const hasRunningPlan = selected.some((item) => item.exeState === "执行中");
     if (hasRunningPlan) {
       this.$message({ type: "warning", message: "存在执行中的执行计划，请重新选择" });
       return;
@@ -50,7 +62,7 @@ export const planDeleteMethods = {
       cancelButtonText: "取消",
       type: "warning",
     }).then(() => {
-      const deleteTasks = this.multipleSelection1.map((item) => deleteExePlanById(item.planId));
+      const deleteTasks = selected.map((item) => deleteExePlanById(item.planId));
       Promise.allSettled(deleteTasks).then((results) => {
         let deletedCount = 0;
         let noopCount = 0;
@@ -89,4 +101,3 @@ export const planDeleteMethods = {
     });
   },
 };
-
