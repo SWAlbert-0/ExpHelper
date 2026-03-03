@@ -1,5 +1,14 @@
 const { test, expect } = require("@playwright/test");
 
+async function clickDeleteByRowText(page, rowText) {
+  const row = page.locator(".el-table__body tr").filter({
+    has: page.getByRole("cell", { name: rowText })
+  }).first();
+  const deleteButton = row.getByRole("button", { name: "删除" });
+  await expect(deleteButton).toBeEnabled();
+  await deleteButton.click();
+}
+
 async function mockAuth(page) {
   await page.route("**/api/**", async route => {
     await route.fulfill({
@@ -39,7 +48,7 @@ async function mockAuth(page) {
             avatar: "",
             unread_msg_count: 0
           },
-          roles: ["admin"],
+          roles: ["ROLE_ADMIN"],
           permissions: ["*:*:*"]
         }
       })
@@ -97,7 +106,7 @@ test("algorithm manage refresh label shown and delete success works", async ({ p
   const tableBody = page.locator(".el-table__body");
   await expect(tableBody.getByText("nsga2-zdt1-ls").first()).toBeVisible();
 
-  await tableBody.getByRole("button", { name: "删除" }).first().click();
+  await clickDeleteByRowText(page, "nsga2-zdt1-ls");
   await page.locator(".el-message-box__btns").getByRole("button", { name: "确定" }).click();
   await expect(page.locator(".el-message__content").filter({ hasText: "删除成功" })).toBeVisible();
   await expect(tableBody.getByText("nsga2-zdt1-ls")).toHaveCount(0);
@@ -153,7 +162,7 @@ test("algorithm manage delete treats missing record as noop success", async ({ p
   await page.getByRole("button", { name: /登\s*录/ }).click();
   await page.getByRole("menubar").getByRole("link", { name: "算法库管理" }).click();
 
-  await page.locator(".el-table__body").getByRole("button", { name: "删除" }).first().click();
+  await clickDeleteByRowText(page, "broken-alg");
   await page.locator(".el-message-box__btns").getByRole("button", { name: "确定" }).click();
   await expect(page.locator(".el-message__content").filter({ hasText: "记录已不存在" })).toBeVisible();
   await expect(page.locator(".el-table__body").getByText("broken-alg")).toHaveCount(0);
@@ -208,7 +217,7 @@ test("algorithm manage shows repaired success hint when backend repaired legacy 
   await page.getByRole("button", { name: /登\s*录/ }).click();
   await page.getByRole("menubar").getByRole("link", { name: "算法库管理" }).click();
 
-  await page.locator(".el-table__body").getByRole("button", { name: "删除" }).first().click();
+  await clickDeleteByRowText(page, "legacy-alg");
   await page.locator(".el-message-box__btns").getByRole("button", { name: "确定" }).click();
   await expect(page.locator(".el-message__content").filter({ hasText: "已自动修复历史数据" })).toBeVisible();
 });
@@ -260,7 +269,7 @@ test("algorithm manage delete blocked when algorithm is referenced by plans", as
   await page.getByRole("button", { name: /登\s*录/ }).click();
   await page.getByRole("menubar").getByRole("link", { name: "算法库管理" }).click();
 
-  await page.locator(".el-table__body").getByRole("button", { name: "删除" }).first().click();
+  await clickDeleteByRowText(page, "in-use-alg");
   await page.locator(".el-message-box__btns").getByRole("button", { name: "确定" }).click();
   await expect(page.locator(".el-message__content").filter({ hasText: "算法已被执行计划引用" })).toBeVisible();
 });

@@ -28,7 +28,7 @@ test("login flow redirects to main page", async ({ page }) => {
             avatar: "",
             unread_msg_count: 0
           },
-          roles: ["admin"],
+          roles: ["ROLE_ADMIN"],
           permissions: ["*:*:*"]
         }
       })
@@ -73,7 +73,7 @@ test("broken avatar url falls back to default avatar", async ({ page }) => {
             avatar: "/api/auth/avatar/missing-avatar.png",
             unread_msg_count: 0
           },
-          roles: ["admin"],
+          roles: ["ROLE_ADMIN"],
           permissions: ["*:*:*"]
         }
       })

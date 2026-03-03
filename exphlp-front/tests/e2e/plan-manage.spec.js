@@ -39,7 +39,7 @@ test("plan manage add flow shows required problem validation", async ({ page }) 
             avatar: "",
             unread_msg_count: 0
           },
-          roles: ["admin"],
+          roles: ["ROLE_ADMIN"],
           permissions: ["*:*:*"]
         }
       })
@@ -140,7 +140,7 @@ test("plan manage shows lastError and allows re-execute for abnormal plan", asyn
             avatar: "",
             unread_msg_count: 0
           },
-          roles: ["admin"],
+          roles: ["ROLE_ADMIN"],
           permissions: ["*:*:*"]
         }
       })
@@ -238,7 +238,7 @@ test("plan manage view supports execution log polling dialog", async ({ page }) 
         code: 200,
         data: {
           user: { userId: "pw-user", username: "admin", name: "管理员", avatar: "", unread_msg_count: 0 },
-          roles: ["admin"],
+          roles: ["ROLE_ADMIN"],
           permissions: ["*:*:*"]
         }
       })
@@ -333,7 +333,7 @@ test("plan list query sends fuzzy planName condition", async ({ page }) => {
         code: 200,
         data: {
           user: { userId: "pw-user", username: "admin", name: "管理员", avatar: "", unread_msg_count: 0 },
-          roles: ["admin"],
+          roles: ["ROLE_ADMIN"],
           permissions: ["*:*:*"]
         }
       })

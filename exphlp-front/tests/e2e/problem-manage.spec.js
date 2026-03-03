@@ -39,7 +39,7 @@ async function mockAuth(page) {
             avatar: "",
             unread_msg_count: 0
           },
-          roles: ["admin"],
+          roles: ["ROLE_ADMIN"],
           permissions: ["*:*:*"]
         }
       })
